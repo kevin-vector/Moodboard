@@ -9,6 +9,7 @@ import Link from "next/link"
 import ImageGrid from "@/components/image-grid"
 import SearchBar from "@/components/search-bar"
 import TagSelector from "@/components/tag-selector"
+import axios from 'axios';
 
 const tagCategories = {
   Mediums: [
@@ -142,67 +143,64 @@ const tagCategories = {
 
 const allTags = Object.values(tagCategories).flat()
 
-const generateMockImages = (preserveLocked: { id: string; url: string; tag: string; isLocked: boolean; position: number } | null = null, selectedTag: string | null = null) => {
-  if (preserveLocked) {
-    console.log(`Searching for images similar to: ${preserveLocked.tag}`)
+const generateMockImages = async (preserveLocked: { id: string; url: string; tag: string; isLocked: boolean; position: number } | null = null, selectedTag: string | null = null) => {
+  let fetchedImages = [];
 
-    return Array(7)
+  try {
+    const query = preserveLocked ? preserveLocked.tag : selectedTag || "";
+    console.log(`Searching for images with query: ${query}`);
+
+    const response = await fetch(`http://localhost:8000/search?query=${query}`, {
+      method: "GET",
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch images: ${response.statusText}`);
+    }
+
+    const result = await response.json();
+    console.log("Images fetched successfully:", result.images.length);
+    if(result.images.length === 0){
+      return Array(7)
       .fill(null)
       .map((_, index) => {
-        if (preserveLocked.position === index) {
-          return preserveLocked
-        }
-
-        if (selectedTag) {
-          return {
-            id: `img-${Date.now()}-${index}`,
-            url: `https://source.unsplash.com/random/300x300?${encodeURIComponent(selectedTag)}`,
-            tag: selectedTag,
-            isLocked: false,
-            position: index,
-          }
-        }
-
-        const relatedTags = findRelatedTags(preserveLocked.tag)
-        const similarTag = relatedTags[Math.floor(Math.random() * relatedTags.length)]
+        const randomTag = allTags[Math.floor(Math.random() * allTags.length)]
 
         return {
           id: `img-${Date.now()}-${index}`,
-          url: `https://source.unsplash.com/random/300x300?${encodeURIComponent(similarTag)}`,
-          tag: similarTag,
+          url: `sample${index + 1}.png`,
+          tag: randomTag,
           isLocked: false,
           position: index,
         }
       })
-  }
+    }
+    fetchedImages = result.images.map((url: string, index: number) => ({
+      id: `img-${Date.now()}-${index}`,
+      url: url,
+      tag: query,
+      isLocked: false,
+      position: index,
+    }));
 
-  if (selectedTag) {
+    console.log("fetchedImages", fetchedImages);
+    return fetchedImages;
+  } catch (error) {
+    console.log("Error fetching images:", error);
     return Array(7)
-      .fill(null)
-      .map((_, index) => {
-        return {
-          id: `img-${Date.now()}-${index}`,
-          url: `https://source.unsplash.com/random/300x300?${encodeURIComponent(selectedTag)}`,
-          tag: selectedTag,
-          isLocked: false,
-          position: index,
-        }
-      })
-  }
-
-  return Array(7)
     .fill(null)
     .map((_, index) => {
       const randomTag = allTags[Math.floor(Math.random() * allTags.length)]
 
       return {
         id: `img-${Date.now()}-${index}`,
-        url: `https://source.unsplash.com/random/300x300?${encodeURIComponent(randomTag)}`,
+        url: `sample${index + 1}.png`,
         tag: randomTag,
         isLocked: false,
         position: index,
       }
     })
+  }
 }
 
 const findRelatedTags = (tag: string) => {
@@ -235,11 +233,38 @@ export default function MoodboardGenerator() {
   const canvasRef = useRef(null)
 
   useEffect(() => {
-    const initialImages = generateMockImages()
-    setImages(initialImages)
-    setIsLoading(false)
+    (async () => {
+      const initialImages = await generateMockImages()
+      setImages(initialImages)
+      setIsLoading(false)
+    })()
   }, [])
 
+  useEffect(() => {
+    if(!lockedImage){ return }
+    (async () => {
+      try {
+        console.log("Locking image:", lockedImage)
+        const response = await fetch("http://localhost:8000/lock", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ image_path: lockedImage.url }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to lock image: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+        console.log("Image locked successfully:", result);
+      } catch (error) {
+        console.error("Error locking image:", error);
+      }
+    })()
+  }, [lockedImage]);
+  
   const filteredImages = searchQuery
     ? images.filter((img) => img.tag.toLowerCase().includes(searchQuery.toLowerCase()))
     : images
@@ -254,10 +279,10 @@ export default function MoodboardGenerator() {
     [lockedImage, selectedTag],
   )
 
-  const refreshImages = () => {
+  const refreshImages = async () => {
     setIsLoading(true)
     setTimeout(() => {
-      setImages(generateMockImages(lockedImage, selectedTag))
+      generateMockImages(lockedImage, selectedTag).then((newImages) => setImages(newImages))
       setIsLoading(false)
     }, 300)
   }
@@ -267,12 +292,12 @@ export default function MoodboardGenerator() {
     setSelectedTag(searchQuery)
     setIsLoading(true)
     setTimeout(() => {
-      setImages(generateMockImages(lockedImage, searchQuery))
+      generateMockImages(lockedImage, searchQuery).then((newImages) => setImages(newImages))
       setIsLoading(false)
     }, 300)
   }
 
-  const toggleLock = (imageId) => {
+  const toggleLock = async (imageId) => {
     setImages((prevImages) => {
       const newImages = prevImages.map((img, idx) => {
         if ('id' in img && img.id === imageId) {
@@ -294,18 +319,6 @@ export default function MoodboardGenerator() {
 
         return img
       })
-
-      const newlyLockedImage = newImages.find((img) => img.isLocked)
-
-      if (newlyLockedImage) {
-        setIsLoading(true)
-        setTimeout(() => {
-          setImages(generateMockImages(newlyLockedImage, selectedTag))
-          setIsLoading(false)
-        }, 300)
-        return newImages
-      }
-
       return newImages
     })
   }
@@ -470,12 +483,16 @@ export default function MoodboardGenerator() {
   }, [handleKeyDown])
 
   const handleTagSelect = (tag: string) => {
-    alert("fkjsdalfjasdklf")
     setSearchQuery(tag)
     setSelectedTag(tag)
     setIsLoading(true)
     setTimeout(() => {
-      setImages(generateMockImages(lockedImage, tag))
+      generateMockImages(lockedImage, tag).then((newImages) => {
+        if (newImages) {
+          setImages(newImages)
+        }
+      })
+      console.log(images)
       setIsLoading(false)
     }, 300)
   }
@@ -536,9 +553,9 @@ export default function MoodboardGenerator() {
           >
             <button
               onClick={handleSave}
-              disabled={isSaving || images.length === 0}
+              disabled={!images || isSaving || images?.length === 0}
               className={`flex items-center gap-2 bg-gradient-to-r from-violet-600 to-fuchsia-500 text-white px-6 py-3 rounded-full font-medium shadow-md hover:shadow-lg transition-all ${
-                isSaving || images.length === 0 ? "opacity-70 cursor-not-allowed" : ""
+                isSaving || images?.length === 0 ? "opacity-70 cursor-not-allowed" : ""
               }`}
             >
               {isSaving ? (
