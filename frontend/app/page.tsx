@@ -77,18 +77,20 @@ export default function LandingPage() {
 
   // Handle scroll progress
   useEffect(() => {
-    const unsubscribe = scrollYProgress.onChange((v) => setScrollProgress(v))
+    if(window != undefined){
+      const unsubscribe = scrollYProgress.onChange((v) => setScrollProgress(v))
 
-    const handleScroll = () => {
-      if (window.scrollY > 100) {
-        setShowScrollHint(false)
+      const handleScroll = () => {
+        if (window.scrollY > 100) {
+          setShowScrollHint(false)
+        }
       }
-    }
 
-    window.addEventListener("scroll", handleScroll)
-    return () => {
-      window.removeEventListener("scroll", handleScroll)
-      unsubscribe()
+      window.addEventListener("scroll", handleScroll)
+      return () => {
+        window.removeEventListener("scroll", handleScroll)
+        unsubscribe()
+      }
     }
   }, [scrollYProgress])
 
@@ -147,30 +149,7 @@ export default function LandingPage() {
       />
 
       {/* Animated background elements */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
-        <AnimatedShape delay={0} size={400} x={-100} y={-100} color="from-violet-200/20 to-blue-200/20" />
-        <AnimatedShape
-          delay={2}
-          size={300}
-          x={window.innerWidth - 200}
-          y={100}
-          color="from-pink-200/20 to-purple-200/20"
-        />
-        <AnimatedShape
-          delay={4}
-          size={350}
-          x={window.innerWidth / 2 - 150}
-          y={window.innerHeight - 200}
-          color="from-blue-200/20 to-cyan-200/20"
-        />
-        <AnimatedShape
-          delay={6}
-          size={250}
-          x={window.innerWidth - 300}
-          y={window.innerHeight - 300}
-          color="from-amber-200/20 to-pink-200/20"
-        />
-      </div>
+      
 
       {/* Header */}
       <header className="relative z-10 container mx-auto px-4 py-6">
