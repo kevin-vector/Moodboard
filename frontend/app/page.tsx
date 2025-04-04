@@ -28,10 +28,10 @@ export default function LandingPage() {
   const [showScrollHint, setShowScrollHint] = useState(true)
 
   // Refs for scroll animations
-  const heroRef = useRef<HTMLElement>(null)
-  const featuresRef = useRef<HTMLElement>(null)
-  const howItWorksRef = useRef<HTMLElement>(null)
-  const testimonialsRef = useRef<HTMLElement>(null)
+  const heroRef = useRef<HTMLElement | null>(null)
+  const featuresRef = useRef<HTMLElement | null>(null)
+  const howItWorksRef = useRef<HTMLElement | null>(null)
+  const testimonialsRef = useRef<HTMLElement | null>(null)
 
   // Scroll animation controls
   const { scrollYProgress } = useScroll()
@@ -48,7 +48,7 @@ export default function LandingPage() {
     design: {
       title: "Design Inspiration",
       description: "Perfect for UI/UX designers seeking visual inspiration",
-      image: "public/sample1.png",
+      image: "sample1.png",
       color: "from-violet-600 to-fuchsia-500",
       tags: ["UI design", "minimalism", "typography", "gradient"],
     },
@@ -99,11 +99,11 @@ export default function LandingPage() {
   }
 
   // Scroll to section
-  const scrollToSection = (ref: React.RefObject<HTMLElement>) => {
-    if (ref.current) {
-      ref.current.scrollIntoView({ behavior: "smooth" })
+  const scrollToSection = (ref: React.RefObject<HTMLElement | null>) => {
+      if (ref.current) {
+        ref.current.scrollIntoView({ behavior: "smooth" })
+      }
     }
-  }
 
   // Animated background shapes
   const AnimatedShape = ({
