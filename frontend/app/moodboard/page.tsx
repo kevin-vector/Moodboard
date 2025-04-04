@@ -10,7 +10,6 @@ import ImageGrid from "@/components/image-grid"
 import SearchBar from "@/components/search-bar"
 import TagSelector from "@/components/tag-selector"
 
-// Tag categories structure
 const tagCategories = {
   Mediums: [
     "illustration",
@@ -147,7 +146,6 @@ const generateMockImages = (preserveLocked: { id: string; url: string; tag: stri
   if (preserveLocked) {
     console.log(`Searching for images similar to: ${preserveLocked.tag}`)
 
-    // Create a new array of 7 images
     return Array(7)
       .fill(null)
       .map((_, index) => {
@@ -195,7 +193,6 @@ const generateMockImages = (preserveLocked: { id: string; url: string; tag: stri
   return Array(7)
     .fill(null)
     .map((_, index) => {
-      // Pick a random tag
       const randomTag = allTags[Math.floor(Math.random() * allTags.length)]
 
       return {
@@ -209,25 +206,27 @@ const generateMockImages = (preserveLocked: { id: string; url: string; tag: stri
 }
 
 const findRelatedTags = (tag: string) => {
-  let tagCategory: keyof typeof tagCategories | null = null
-  for (const [category, tags] of Object.entries(tagCategories) as [keyof typeof tagCategories, string[]][]) {
+  let tagCategory: string | null = null
+  for (const [category, tags] of Object.entries(tagCategories)) {
     if (tags.includes(tag)) {
       tagCategory = category
       break
     }
   }
+
   if (tagCategory) {
-    return tagCategories[tagCategory!].filter((t) => t !== tag)
+    return tagCategories[tagCategory as keyof typeof tagCategories].filter((t) => t !== tag)
   }
+
   return allTags.filter((t) => t !== tag).slice(0, 10)
 }
 
 export default function MoodboardGenerator() {
   const [images, setImages] = useState<
-    { id: string; url: string; tag: string; isLocked: boolean; position: number }[]
+    ({ id: string; url: string; tag: string; isLocked: boolean; position: number })[]
   >([])
   const [searchQuery, setSearchQuery] = useState("")
-  const [lockedImage, setLockedImage] = useState<{ isLocked: boolean; position: number; id: string; url: string; tag: string } | null>(null)
+  const [lockedImage, setLockedImage] = useState<({ id: string; url: string; tag: string; isLocked: boolean; position: number }) | null>(null)
   const [selectedTag, setSelectedTag] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -296,8 +295,7 @@ export default function MoodboardGenerator() {
         return img
       })
 
-      // Find the newly locked image, if any
-      const newlyLockedImage = newImages.find((img) => 'isLocked' in img && img.isLocked)
+      const newlyLockedImage = newImages.find((img) => img.isLocked)
 
       if (newlyLockedImage) {
         setIsLoading(true)
@@ -312,21 +310,15 @@ export default function MoodboardGenerator() {
     })
   }
 
-  // Handle image reordering
-  // Update the moveImage function to maintain the position property when reordering
   const moveImage = (dragIndex, hoverIndex) => {
     const draggedImage = images[dragIndex]
     const newImages = [...images]
 
-    // Remove the dragged item
     newImages.splice(dragIndex, 1)
 
-    // Insert it at the new position
     newImages.splice(hoverIndex, 0, draggedImage)
 
-    // Update the position property for all images
     const updatedImages = newImages.map((img, idx) => {
-      // If this is the locked image, update its position
       if ('isLocked' in img && img.isLocked) {
         setLockedImage({ ...img, position: idx })
       }
@@ -336,7 +328,6 @@ export default function MoodboardGenerator() {
     setImages(updatedImages)
   }
 
-  // Revised function to combine all images into one and download
   const handleSave = async () => {
     if (images.length === 0 || isSaving) return
 
@@ -344,12 +335,13 @@ export default function MoodboardGenerator() {
     setSaveError("")
 
     try {
-      // Create a canvas element
       const canvas = document.createElement("canvas")
       const ctx = canvas.getContext("2d")
-
-      // Set canvas dimensions for a 3x3 grid with some padding
-      // We'll leave the bottom-right cell empty for a cleaner look
+      
+      if (!ctx) {
+        console.error("Failed to get canvas context");
+        return;
+      }
       const cellSize = 300 // Size of each image cell
       const padding = 10 // Padding between images
       const borderWidth = 2 // Border width around each image
@@ -359,152 +351,104 @@ export default function MoodboardGenerator() {
       canvas.width = canvasWidth
       canvas.height = canvasHeight
 
-      // Fill the background
+      ctx.fillStyle = "#f9f5ff" // Light purple background
       if (ctx) {
         ctx.fillStyle = "#f9f5ff" // Light purple background
         ctx.fillRect(0, 0, canvasWidth, canvasHeight)
       } else {
         console.error("Failed to get canvas context");
       }
+      ctx.fillStyle = "#8b5cf6" // Violet color for the title
+      ctx.font = "bold 24px sans-serif"
+      ctx.textAlign = "center"
+      ctx.fillText("MOODBOARD", canvasWidth / 2, padding * 2)
 
-      // Add a title to the moodboard
-      if (ctx) {
-        ctx.fillStyle = "#8b5cf6" // Violet color for the title
-        ctx.font = "bold 24px sans-serif"
-        ctx.textAlign = "center"
-        ctx.fillText("MOODBOARD", canvasWidth / 2, padding * 2)
-      } else {
-        console.error("Failed to get canvas context");
-      }
-
-      // Add the date
       const date = new Date().toLocaleDateString()
-      if (ctx) {
-        ctx.fillStyle = "#6b7280" // Gray color for the date
-        ctx.font = "16px sans-serif"
-        ctx.fillText(date, canvasWidth / 2, padding * 4)
-      } else {
-        console.error("Failed to get canvas context");
-      }
+      ctx.fillStyle = "#6b7280" // Gray color for the date
+      ctx.font = "16px sans-serif"
+      ctx.fillText(date, canvasWidth / 2, padding * 4)
 
-      // Sort images by position to ensure they're in the right order
       const sortedImages = [...images].sort((a, b) => a.position - b.position)
 
-      // Calculate positions for a grid layout
-      // We'll use a 3x3 grid with the bottom-right cell for metadata
       const positions = [
-        // Top row
         { x: padding, y: padding * 6 },
         { x: cellSize + padding * 2 + borderWidth * 2, y: padding * 6 },
         { x: cellSize * 2 + padding * 3 + borderWidth * 4, y: padding * 6 },
 
-        // Middle row
         { x: padding, y: cellSize + padding * 7 + borderWidth * 2 },
         { x: cellSize + padding * 2 + borderWidth * 2, y: cellSize + padding * 7 + borderWidth * 2 },
         { x: cellSize * 2 + padding * 3 + borderWidth * 4, y: cellSize + padding * 7 + borderWidth * 2 },
 
-        // Bottom row - only 1 image, leaving space for metadata
         { x: padding, y: cellSize * 2 + padding * 8 + borderWidth * 4 },
       ]
 
-      // Draw placeholder rectangles for each image position
       positions.forEach((pos, i) => {
         if (i < sortedImages.length) {
-          // Draw a border
-          if (ctx) {
-            ctx.fillStyle = 'isLocked' in sortedImages[i] && sortedImages[i].isLocked ? "#8b5cf6" : "#e5e7eb"
-            ctx.fillRect(pos.x - borderWidth, pos.y - borderWidth, cellSize + borderWidth * 2, cellSize + borderWidth * 2)
-            // Draw a placeholder background
-            ctx.fillStyle = "#f3f4f6"
-            ctx.fillRect(pos.x, pos.y, cellSize, cellSize)
+          ctx.fillStyle = sortedImages[i].isLocked ? "#8b5cf6" : "#e5e7eb"
+          ctx.fillRect(pos.x - borderWidth, pos.y - borderWidth, cellSize + borderWidth * 2, cellSize + borderWidth * 2)
 
-            // Draw the tag label
-            ctx.fillStyle = "rgba(255, 255, 255, 0.8)"
-            ctx.fillRect(pos.x, pos.y + cellSize - 30, cellSize, 30)
+          ctx.fillStyle = "#f3f4f6"
+          ctx.fillRect(pos.x, pos.y, cellSize, cellSize)
 
-            ctx.fillStyle = "#1f2937"
-            ctx.font = "12px sans-serif"
-            ctx.textAlign = "center"
-            ctx.fillText(sortedImages[i].tag, pos.x + cellSize / 2, pos.y + cellSize - 12)
-          }
+          ctx.fillStyle = "rgba(255, 255, 255, 0.8)"
+          ctx.fillRect(pos.x, pos.y + cellSize - 30, cellSize, 30)
+
+          ctx.fillStyle = "#1f2937"
+          ctx.font = "12px sans-serif"
+          ctx.textAlign = "center"
+          ctx.fillText(sortedImages[i].tag, pos.x + cellSize / 2, pos.y + cellSize - 12)
         }
       })
 
-      // Add metadata in the bottom-right cell
       const metaX = cellSize * 2 + padding * 3 + borderWidth * 4
       const metaY = cellSize * 2 + padding * 8 + borderWidth * 4
-      if (ctx) {
-        ctx.fillStyle = "rgba(255, 255, 255, 0.9)"
-        ctx.fillRect(metaX, metaY, cellSize, cellSize)
 
-        ctx.fillStyle = "#6b7280"
-        ctx.font = "14px sans-serif"
-        ctx.textAlign = "left"
+      ctx.fillStyle = "rgba(255, 255, 255, 0.9)"
+      ctx.fillRect(metaX, metaY, cellSize, cellSize)
 
-        // Add some metadata
-        const tags = [...new Set(sortedImages.map((img) => img.tag))].slice(0, 3)
-        ctx.fillText("Tags:", metaX + padding, metaY + padding * 3)
-        tags.forEach((tag, i) => {
-          ctx.fillText(`• ${tag}`, metaX + padding * 2, metaY + padding * 4 + i * 20)
-        })
+      ctx.fillStyle = "#6b7280"
+      ctx.font = "14px sans-serif"
+      ctx.textAlign = "left"
 
-        // Add a small logo/signature
-        ctx.fillStyle = "#8b5cf6"
-        ctx.font = "bold 16px sans-serif"
-        ctx.textAlign = "center"
-        ctx.fillText("Created with MoodBoard", metaX + cellSize / 2, metaY + cellSize - padding * 2)
-      }
+      const tags = [...new Set(sortedImages.map((img) => img.tag))].slice(0, 3)
+      ctx.fillText("Tags:", metaX + padding, metaY + padding * 3)
+      tags.forEach((tag, i) => {
+        ctx.fillText(`• ${tag}`, metaX + padding * 2, metaY + padding * 4 + i * 20)
+      })
 
-      // Now try to load and draw each image
-      // We'll do this one by one to handle errors individually
+      ctx.fillStyle = "#8b5cf6"
+      ctx.font = "bold 16px sans-serif"
+      ctx.textAlign = "center"
+      ctx.fillText("Created with MoodBoard", metaX + cellSize / 2, metaY + cellSize - padding * 2)
+
       for (let i = 0; i < sortedImages.length; i++) {
         const img = sortedImages[i]
         const pos = positions[i]
 
         try {
-          // Create a new image element
           const imgElement = new Image()
 
-          // Create a promise to handle the image loading
           await new Promise((resolve, reject) => {
             imgElement.onload = resolve
             imgElement.onerror = reject
 
-            // Set crossOrigin after setting the event handlers
             imgElement.crossOrigin = "anonymous"
-            if ('url' in img) {
-              imgElement.src = img.url
-            } else {
-              console.warn("Image does not have a URL:", img)
-            }
+            imgElement.src = img.url
 
-            // Set a timeout to reject if the image takes too long to load
             setTimeout(() => reject(new Error("Image load timeout")), 5000)
           })
 
-          // If we get here, the image loaded successfully
-          if (ctx) {
-            ctx.drawImage(imgElement, pos.x, pos.y, cellSize, cellSize)
-          } else {
-            console.error("Failed to get canvas context");
-          }
+          ctx.drawImage(imgElement, pos.x, pos.y, cellSize, cellSize)
         } catch (imgError) {
           console.warn(`Failed to load image ${i}:`, imgError)
-          // The placeholder is already drawn, so we'll just continue
 
-          // Draw an error indicator
-          if (ctx) {
-            ctx.fillStyle = "#f87171" // Light red
-            ctx.font = "12px sans-serif"
-            ctx.textAlign = "center"
-            ctx.fillText("Image unavailable", pos.x + cellSize / 2, pos.y + cellSize / 2)
-          } else {
-            console.error("Failed to get canvas context");
-          }
+          ctx.fillStyle = "#f87171" // Light red
+          ctx.font = "12px sans-serif"
+          ctx.textAlign = "center"
+          ctx.fillText("Image unavailable", pos.x + cellSize / 2, pos.y + cellSize / 2)
         }
       }
 
-      // Convert canvas to a data URL and trigger download
       const dataUrl = canvas.toDataURL("image/png")
       const link = document.createElement("a")
       link.download = `moodboard-${Date.now()}.png`
@@ -518,7 +462,6 @@ export default function MoodboardGenerator() {
     }
   }
 
-  // Add event listener for spacebar
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown)
     return () => {
@@ -526,8 +469,8 @@ export default function MoodboardGenerator() {
     }
   }, [handleKeyDown])
 
-  // Handle tag selection from the TagSelector
   const handleTagSelect = (tag: string) => {
+    alert("fkjsdalfjasdklf")
     setSearchQuery(tag)
     setSelectedTag(tag)
     setIsLoading(true)
@@ -537,7 +480,6 @@ export default function MoodboardGenerator() {
     }, 300)
   }
 
-  // Check if similarity search is active
   const isSimilaritySearchActive = lockedImage !== null
 
   return (
@@ -567,9 +509,10 @@ export default function MoodboardGenerator() {
               selectedTag={selectedTag}
               setSelectedTag={setSelectedTag}
               refreshImages={refreshImages}
+              allTags={allTags}
             />
 
-            <TagSelector tagCategories={tagCategories} onSelectTag={handleTagSelect} />
+            <TagSelector tagCategories={tagCategories} onSelectTag={handleTagSelect} searchQuery={searchQuery} />
           </motion.div>
 
           {isLoading ? (
