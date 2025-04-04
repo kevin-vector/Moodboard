@@ -37,10 +37,10 @@ def save_moodboard():
     for i, img in enumerate(imgs[:7]):
         combined.paste(img, ((i % 4) * 200, (i // 4) * 200))
     combined.save("moodboard.png")
-    return FileResponse("moodboard.png")
+    return combined
 
 def get_image(image_path: str):
-    return FileResponse(os.path.join("data/images", image_path))
+    return os.path.join("data/images", image_path)
 
 def main():
     global locked_embedding
