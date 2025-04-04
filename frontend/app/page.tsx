@@ -99,7 +99,7 @@ export default function LandingPage() {
   }
 
   // Scroll to section
-  const scrollToSection = (ref: React.RefObject<HTMLElement>) => {
+  const scrollToSection = (ref: React.RefObject<HTMLElement | null>) => {
     if (ref.current) {
       ref.current.scrollIntoView({ behavior: "smooth" })
     }
