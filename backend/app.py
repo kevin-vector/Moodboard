@@ -28,7 +28,7 @@ locked_embedding = None
 class LockRequest(BaseModel):
     image_path: str  # Assuming your frontend sends 'imageId' in the body
 
-@app.get("/search")
+@app.get("/api/search")
 async def search(query: str):
     global locked_embedding
     if locked_embedding is not None:
@@ -45,7 +45,7 @@ async def search(query: str):
     sample_indices = random.sample(matches, min(7, len(matches)))
     return {"images": [metadata[i]["path"] for i in sample_indices]}
 
-@app.post("/lock")
+@app.post("/api/lock")
 async def lock(request_body: LockRequest):
     image_path = request_body.image_path
     global locked_embedding
@@ -53,7 +53,7 @@ async def lock(request_body: LockRequest):
     locked_embedding = embeddings[idx:idx+1]  # Shape: (1, 768)
     return {"status": "locked"}
 
-@app.get("/save")
+@app.get("/api/save")
 async def save_moodboard():
     global locked_embedding
     images = await search("") if locked_embedding is not None else await search("default")
@@ -65,6 +65,6 @@ async def save_moodboard():
     return FileResponse("moodboard.png")
 
 # Serve images
-@app.get("/images/{image_path:path}")
+@app.get("/api/images/{image_path:path}")
 async def get_image(image_path: str):
     return FileResponse(os.path.join("data/images", image_path))
