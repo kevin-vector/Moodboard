@@ -150,7 +150,7 @@ const generateMockImages = async (preserveLocked: { id: string; url: string; tag
     const query = preserveLocked ? preserveLocked.tag : selectedTag || "";
     console.log(`Searching for images with query: ${query}`);
 
-    const response = await fetch(`http://localhost:8000/search?query=${query}`, {
+    const response = await fetch(`http://${window.location.origin}/api/search?query=${query}`, {
       method: "GET",
     });
 
@@ -245,7 +245,7 @@ export default function MoodboardGenerator() {
     (async () => {
       try {
         console.log("Locking image:", lockedImage)
-        const response = await fetch("http://localhost:8000/lock", {
+        const response = await fetch("http://${window.location.origin}/api/lock", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
