@@ -4,12 +4,10 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import { DndProvider } from "react-dnd"
 import { HTML5Backend } from "react-dnd-html5-backend"
 import { Download, ArrowLeft } from "lucide-react"
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 import Link from "next/link"
-import ImageGrid from "@/components/image-grid"
-import SearchBar from "@/components/search-bar"
-import TagSelector from "@/components/tag-selector"
 import axios from 'axios';
+import { Search, ExternalLink, Lock, Plus, X, Unlock } from "lucide-react"
 
 const tagCategories = {
   Mediums: [
@@ -143,14 +141,15 @@ const tagCategories = {
 
 const allTags = Object.values(tagCategories).flat()
 
-const generateMockImages = async (preserveLocked: { id: string; url: string; tag: string; isLocked: boolean; position: number } | null = null, selectedTag: string | null = null) => {
+const generateMockImages = async (searchQuery = "", count = 7) => {
   let fetchedImages = [];
 
   try {
-    const query = preserveLocked ? preserveLocked.tag : selectedTag || "";
-    console.log(`Searching for images with query: ${query}`);
+    console.log(`Searching for images with query: ${searchQuery}`);
+    
+    const url = `${window.location.origin}/api/search?query=${searchQuery}`.replace('3000', '8000')
 
-    const response = await fetch(`${window.location.origin}/api/search?query=${query}`, {
+    const response = await fetch(url, {
       method: "GET",
     });
 
@@ -178,7 +177,7 @@ const generateMockImages = async (preserveLocked: { id: string; url: string; tag
     fetchedImages = result.images.map((url: string, index: number) => ({
       id: `img-${Date.now()}-${index}`,
       url: url,
-      tag: query,
+      tag: searchQuery,
       isLocked: false,
       position: index,
     }));
@@ -224,124 +223,133 @@ export default function MoodboardGenerator() {
     ({ id: string; url: string; tag: string; isLocked: boolean; position: number })[]
   >([])
   const [searchQuery, setSearchQuery] = useState("")
-  const [lockedImage, setLockedImage] = useState<({ id: string; url: string; tag: string; isLocked: boolean; position: number }) | null>(null)
-  const [selectedTag, setSelectedTag] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState("")
+  const [showSpacebarHint, setShowSpacebarHint] = useState(true)
+  const [filteredTags, setFilteredTags] = useState<string[]>([])
+  const [isSearchFocused, setIsSearchFocused] = useState(false)
 
-  const canvasRef = useRef(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const suggestionsRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     (async () => {
-      const initialImages = await generateMockImages()
+      const initialImages = await generateMockImages("", 7)
       setImages(initialImages)
+      console.log("initialImages", initialImages)
       setIsLoading(false)
     })()
+    const timer = setTimeout(() => {
+      setShowSpacebarHint(false)
+    }, 5000)
+    return () => clearTimeout(timer)
   }, [])
 
   useEffect(() => {
-    if(!lockedImage){ return }
-    (async () => {
-      try {
-        console.log("Locking image:", lockedImage)
-        const response = await fetch(`${window.location.origin}/api/lock`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ image_path: lockedImage.url }),
-        });
+    if (!searchQuery.trim()) {
+      setFilteredTags([])
+      return
+    }
 
-        if (!response.ok) {
-          throw new Error(`Failed to lock image: ${response.statusText}`);
-        }
+    const filtered = allTags.filter((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 6) // Limit to 6 suggestions
 
-        const result = await response.json();
-        console.log("Image locked successfully:", result);
-      } catch (error) {
-        console.error("Error locking image:", error);
+    setFilteredTags(filtered)
+  }, [searchQuery])
+
+  // Handle click outside to close suggestions
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        suggestionsRef.current &&
+        !suggestionsRef.current.contains(event.target as Node) &&
+        searchInputRef.current &&
+        !searchInputRef.current.contains(event.target as Node)
+      ) {
+        setIsSearchFocused(false)
       }
-    })()
-  }, [lockedImage]);
-  
-  const filteredImages = searchQuery
-    ? images.filter((img) => img.tag.toLowerCase().includes(searchQuery.toLowerCase()))
-    : images
+    }
+
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+    }
+  }, [])
 
   const handleKeyDown = useCallback(
     (e) => {
-      if (e.code === "Space" && !e.target.classList.contains("search-input")) {
+      if (e.code === "Space" && document.activeElement !== searchInputRef.current) {
         e.preventDefault()
         refreshImages()
+        console.log("backspace clicked")
       }
     },
-    [lockedImage, selectedTag],
+    [searchQuery],
   )
 
-  const refreshImages = async () => {
+  useEffect(() => {
+    window.addEventListener("keydown", handleKeyDown)
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [handleKeyDown])
+
+  const refreshImages = ( ) => {
     setIsLoading(true)
-    setTimeout(() => {
-      generateMockImages(lockedImage, selectedTag).then((newImages) => setImages(newImages))
-      setIsLoading(false)
-    }, 300)
+    setShowSpacebarHint(false)
+
+    setTimeout(async () => {
+      const lockedImages = images.filter((img) => img.isLocked);
+    
+      const currentCount = images.length;
+      const newImagesCount = currentCount - lockedImages.length;
+      console.log("newImagesCount", newImagesCount);
+    
+      const newImages = await generateMockImages(searchQuery, newImagesCount);
+    
+      setImages([...lockedImages, ...newImages]);
+      setIsLoading(false);
+    }, 300);
   }
 
   const handleSearchSubmit = (e) => {
     e.preventDefault()
-    setSelectedTag(searchQuery)
+    refreshImages()
+    setIsSearchFocused(false)
+  }
+
+  const handleTagSelect = (tag: string) => {
+    setSearchQuery(tag)
+    setIsSearchFocused(false)
+    refreshImages()
+  }
+
+  const toggleLock = (id: string) => {
+    setImages((prevImages) => prevImages.map((img) => (img.id === id ? { ...img, isLocked: !img.isLocked } : img)))
+  }
+
+  const addImage = () => {
+    if (images.length >= 12) {
+      return
+    }
+
     setIsLoading(true)
     setTimeout(() => {
-      generateMockImages(lockedImage, searchQuery).then((newImages) => setImages(newImages))
+      const newImage = generateMockImages(searchQuery, 1)[0]
+      setImages((prevImages) => [...prevImages, newImage])
       setIsLoading(false)
     }, 300)
   }
 
-  const toggleLock = async (imageId) => {
-    setImages((prevImages) => {
-      const newImages = prevImages.map((img, idx) => {
-        if ('id' in img && img.id === imageId) {
-          const newLockedState = !img.isLocked
+  const removeImage = (id: string) => {
+    if (images.length <= 1) {
+      return
+    }
 
-          if (newLockedState) {
-            const imageWithPosition = { ...img, isLocked: newLockedState, position: idx }
-            setLockedImage(imageWithPosition)
-            return imageWithPosition
-          } else {
-            setLockedImage(null)
-            return { ...img, isLocked: newLockedState }
-          }
-        }
-
-        if ('isLocked' in img && img.isLocked && imageId !== img.id) {
-          return { ...img, isLocked: false }
-        }
-
-        return img
-      })
-      return newImages
-    })
+    setImages((prevImages) => prevImages.filter((img) => img.id !== id))
   }
 
-  const moveImage = (dragIndex, hoverIndex) => {
-    const draggedImage = images[dragIndex]
-    const newImages = [...images]
-
-    newImages.splice(dragIndex, 1)
-
-    newImages.splice(hoverIndex, 0, draggedImage)
-
-    const updatedImages = newImages.map((img, idx) => {
-      if ('isLocked' in img && img.isLocked) {
-        setLockedImage({ ...img, position: idx })
-      }
-      return { ...img, position: idx }
-    })
-
-    setImages(updatedImages)
-  }
-
-  const handleSave = async () => {
+  const handleExport = async () => {
     if (images.length === 0 || isSaving) return
 
     setIsSaving(true)
@@ -350,92 +358,77 @@ export default function MoodboardGenerator() {
     try {
       const canvas = document.createElement("canvas")
       const ctx = canvas.getContext("2d")
-      
-      if (!ctx) {
-        console.error("Failed to get canvas context");
-        return;
-      }
-      const cellSize = 300 // Size of each image cell
-      const padding = 10 // Padding between images
-      const borderWidth = 2 // Border width around each image
-      const canvasWidth = cellSize * 3 + padding * 4 + borderWidth * 6
-      const canvasHeight = cellSize * 3 + padding * 4 + borderWidth * 6
+
+      const canvasWidth = 1200
+      const canvasHeight = 800
 
       canvas.width = canvasWidth
       canvas.height = canvasHeight
 
-      ctx.fillStyle = "#f9f5ff" // Light purple background
-      if (ctx) {
-        ctx.fillStyle = "#f9f5ff" // Light purple background
-        ctx.fillRect(0, 0, canvasWidth, canvasHeight)
-      } else {
+      if (!ctx) {
         console.error("Failed to get canvas context");
+        return;
       }
-      ctx.fillStyle = "#8b5cf6" // Violet color for the title
-      ctx.font = "bold 24px sans-serif"
-      ctx.textAlign = "center"
-      ctx.fillText("MOODBOARD", canvasWidth / 2, padding * 2)
 
-      const date = new Date().toLocaleDateString()
-      ctx.fillStyle = "#6b7280" // Gray color for the date
-      ctx.font = "16px sans-serif"
-      ctx.fillText(date, canvasWidth / 2, padding * 4)
+      ctx.fillStyle = "#121212" // Dark background
+      ctx.fillRect(0, 0, canvasWidth, canvasHeight)
 
-      const sortedImages = [...images].sort((a, b) => a.position - b.position)
+      let positions: { x: number; y: number; width: number; height: number }[] = []
 
-      const positions = [
-        { x: padding, y: padding * 6 },
-        { x: cellSize + padding * 2 + borderWidth * 2, y: padding * 6 },
-        { x: cellSize * 2 + padding * 3 + borderWidth * 4, y: padding * 6 },
+      if (images.length <= 3) {
+        const width = canvasWidth / images.length
+        positions = images.map((_, i) => ({
+          x: i * width,
+          y: 0,
+          width: width,
+          height: canvasHeight,
+        }))
+      } else if (images.length === 4) {
+        const width = canvasWidth / 2
+        const height = canvasHeight / 2
+        positions = [
+          { x: 0, y: 0, width, height },
+          { x: width, y: 0, width, height },
+          { x: 0, y: height, width, height },
+          { x: width, y: height, width, height },
+        ]
+      } else if (images.length <= 6) {
+        const width = canvasWidth / 3
+        const height = canvasHeight / 2
+        positions = Array(6)
+          .fill(null)
+          .map((_, i) => ({
+            x: (i % 3) * width,
+            y: Math.floor(i / 3) * height,
+            width,
+            height,
+          }))
+      } else if (images.length <= 9) {
+        const width = canvasWidth / 3
+        const height = canvasHeight / 3
+        positions = Array(9)
+          .fill(null)
+          .map((_, i) => ({
+            x: (i % 3) * width,
+            y: Math.floor(i / 3) * height,
+            width,
+            height,
+          }))
+      } else {
+        const width = canvasWidth / 4
+        const height = canvasHeight / 3
+        positions = Array(12)
+          .fill(null)
+          .map((_, i) => ({
+            x: (i % 4) * width,
+            y: Math.floor(i / 4) * height,
+            width,
+            height,
+          }))
+      }
 
-        { x: padding, y: cellSize + padding * 7 + borderWidth * 2 },
-        { x: cellSize + padding * 2 + borderWidth * 2, y: cellSize + padding * 7 + borderWidth * 2 },
-        { x: cellSize * 2 + padding * 3 + borderWidth * 4, y: cellSize + padding * 7 + borderWidth * 2 },
-
-        { x: padding, y: cellSize * 2 + padding * 8 + borderWidth * 4 },
-      ]
-
-      positions.forEach((pos, i) => {
-        if (i < sortedImages.length) {
-          ctx.fillStyle = sortedImages[i].isLocked ? "#8b5cf6" : "#e5e7eb"
-          ctx.fillRect(pos.x - borderWidth, pos.y - borderWidth, cellSize + borderWidth * 2, cellSize + borderWidth * 2)
-
-          ctx.fillStyle = "#f3f4f6"
-          ctx.fillRect(pos.x, pos.y, cellSize, cellSize)
-
-          ctx.fillStyle = "rgba(255, 255, 255, 0.8)"
-          ctx.fillRect(pos.x, pos.y + cellSize - 30, cellSize, 30)
-
-          ctx.fillStyle = "#1f2937"
-          ctx.font = "12px sans-serif"
-          ctx.textAlign = "center"
-          ctx.fillText(sortedImages[i].tag, pos.x + cellSize / 2, pos.y + cellSize - 12)
-        }
-      })
-
-      const metaX = cellSize * 2 + padding * 3 + borderWidth * 4
-      const metaY = cellSize * 2 + padding * 8 + borderWidth * 4
-
-      ctx.fillStyle = "rgba(255, 255, 255, 0.9)"
-      ctx.fillRect(metaX, metaY, cellSize, cellSize)
-
-      ctx.fillStyle = "#6b7280"
-      ctx.font = "14px sans-serif"
-      ctx.textAlign = "left"
-
-      const tags = [...new Set(sortedImages.map((img) => img.tag))].slice(0, 3)
-      ctx.fillText("Tags:", metaX + padding, metaY + padding * 3)
-      tags.forEach((tag, i) => {
-        ctx.fillText(`• ${tag}`, metaX + padding * 2, metaY + padding * 4 + i * 20)
-      })
-
-      ctx.fillStyle = "#8b5cf6"
-      ctx.font = "bold 16px sans-serif"
-      ctx.textAlign = "center"
-      ctx.fillText("Created with MoodBoard", metaX + cellSize / 2, metaY + cellSize - padding * 2)
-
-      for (let i = 0; i < sortedImages.length; i++) {
-        const img = sortedImages[i]
+      for (let i = 0; i < Math.min(images.length, positions.length); i++) {
+        const img = images[i]
         const pos = positions[i]
 
         try {
@@ -451,16 +444,36 @@ export default function MoodboardGenerator() {
             setTimeout(() => reject(new Error("Image load timeout")), 5000)
           })
 
-          ctx.drawImage(imgElement, pos.x, pos.y, cellSize, cellSize)
+          ctx.drawImage(imgElement, pos.x, pos.y, pos.width, pos.height)
+
+          if (img.isLocked) {
+            ctx.fillStyle = "rgba(0, 0, 0, 0.5)"
+            ctx.beginPath()
+            ctx.arc(pos.x + 20, pos.y + 20, 15, 0, Math.PI * 2)
+            ctx.fill()
+
+            ctx.fillStyle = "#ff9800"
+            ctx.font = "bold 14px sans-serif"
+            ctx.textAlign = "center"
+            ctx.fillText("🔒", pos.x + 20, pos.y + 24)
+          }
         } catch (imgError) {
           console.warn(`Failed to load image ${i}:`, imgError)
 
-          ctx.fillStyle = "#f87171" // Light red
-          ctx.font = "12px sans-serif"
+          ctx.fillStyle = "#2a2a2a"
+          ctx.fillRect(pos.x, pos.y, pos.width, pos.height)
+
+          ctx.fillStyle = "#ffffff"
+          ctx.font = "16px sans-serif"
           ctx.textAlign = "center"
-          ctx.fillText("Image unavailable", pos.x + cellSize / 2, pos.y + cellSize / 2)
+          ctx.fillText("Image unavailable", pos.x + pos.width / 2, pos.y + pos.height / 2)
         }
       }
+
+      ctx.fillStyle = "rgba(255, 255, 255, 0.5)"
+      ctx.font = "12px sans-serif"
+      ctx.textAlign = "right"
+      ctx.fillText("Generated with Moodboard", canvasWidth - 10, canvasHeight - 10)
 
       const dataUrl = canvas.toDataURL("image/png")
       const link = document.createElement("a")
@@ -475,138 +488,220 @@ export default function MoodboardGenerator() {
     }
   }
 
-  useEffect(() => {
-    window.addEventListener("keydown", handleKeyDown)
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown)
-    }
-  }, [handleKeyDown])
+  const highlightMatch = (text: string, query: string) => {
+    if (!query.trim()) return text
 
-  const handleTagSelect = (tag: string) => {
-    setSearchQuery(tag)
-    setSelectedTag(tag)
-    setIsLoading(true)
-    setTimeout(() => {
-      generateMockImages(lockedImage, tag).then((newImages) => {
-        if (newImages) {
-          setImages(newImages)
-        }
-      })
-      console.log(images)
-      setIsLoading(false)
-    }, 300)
+    try {
+      const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      const regex = new RegExp(`(${escapedQuery})`, "gi")
+      const parts = text.split(regex)
+
+      return (
+        <>
+          {parts.map((part, i) =>
+            regex.test(part) ? (
+              <span key={i} className="bg-primary/20 text-primary-foreground font-medium">
+                {part}
+              </span>
+            ) : (
+              <span key={i}>{part}</span>
+            ),
+          )}
+        </>
+      )
+    } catch (e) {
+      return text
+    }
   }
 
-  const isSimilaritySearchActive = lockedImage !== null
-
   return (
-    <DndProvider backend={HTML5Backend}>
-      <main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50">
-        <div className="max-w-[1200px] mx-auto px-4 py-6">
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-            className="mb-6"
-          >
-            <Link
-              href="/"
-              className="inline-flex items-center gap-2 text-violet-600 hover:text-violet-700 transition-colors"
-            >
-              <ArrowLeft size={16} />
-              <span>Back to Home</span>
-            </Link>
-          </motion.div>
-
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-            <SearchBar
-              searchQuery={searchQuery}
-              setSearchQuery={setSearchQuery}
-              handleSearchSubmit={handleSearchSubmit}
-              selectedTag={selectedTag}
-              setSelectedTag={setSelectedTag}
-              refreshImages={refreshImages}
-              allTags={allTags}
-            />
-
-            <TagSelector tagCategories={tagCategories} onSelectTag={handleTagSelect} searchQuery={searchQuery} />
-          </motion.div>
-
-          {isLoading ? (
-            <div className="flex justify-center items-center h-[500px]">
-              <div className="relative w-20 h-20">
-                <div className="absolute top-0 left-0 w-full h-full border-4 border-violet-200 rounded-full"></div>
-                <div className="absolute top-0 left-0 w-full h-full border-4 border-t-violet-600 rounded-full animate-spin"></div>
-              </div>
+    <main className="min-h-screen bg-background text-foreground overflow-hidden">
+      <header className="h-16 px-4 flex items-center justify-between border-b border-border">
+        <div className="relative w-72">
+          <form onSubmit={handleSearchSubmit} className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search className="h-4 w-4 text-muted-foreground" />
             </div>
-          ) : (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}>
-              <ImageGrid images={filteredImages} toggleLock={toggleLock} moveImage={moveImage} />
+            <input
+              ref={searchInputRef}
+              type="text"
+              className="search-input block w-full pl-10 pr-3 py-2 bg-secondary rounded-md border border-border text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              placeholder="/imagine"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onFocus={() => setIsSearchFocused(true)}
+              autoComplete="off"
+            />
+          </form>
+
+          <AnimatePresence>
+            {isSearchFocused && filteredTags.length > 0 && (
+              <motion.div
+                ref={suggestionsRef}
+                className="absolute z-10 mt-1 w-full bg-card rounded-md shadow-lg border border-border overflow-hidden"
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+              >
+                <div className="p-1">
+                  <div className="space-y-0.5">
+                    {filteredTags.map((tag) => (
+                      <button
+                        key={tag}
+                        className="w-full text-left px-3 py-1.5 text-sm hover:bg-secondary rounded-sm flex items-center gap-2"
+                        onClick={() => handleTagSelect(tag)}
+                      >
+                        <span>{highlightMatch(tag, searchQuery)}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        <AnimatePresence>
+          {showSpacebarHint && (
+            <motion.div
+              className="absolute left-1/2 transform -translate-x-1/2 text-sm text-orange-500 uppercase tracking-wider"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+            >
+              Press space to generate moodboards
             </motion.div>
           )}
+        </AnimatePresence>
 
-          <motion.div
-            className="mt-8 flex flex-col items-center"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-          >
-            <button
-              onClick={handleSave}
-              disabled={!images || isSaving || images?.length === 0}
-              className={`flex items-center gap-2 bg-gradient-to-r from-violet-600 to-fuchsia-500 text-white px-6 py-3 rounded-full font-medium shadow-md hover:shadow-lg transition-all ${
-                isSaving || images?.length === 0 ? "opacity-70 cursor-not-allowed" : ""
-              }`}
-            >
-              {isSaving ? (
-                <>
-                  <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Download size={20} />
-                  Save Moodboard
-                </>
-              )}
-            </button>
+        <button
+          onClick={handleExport}
+          disabled={isSaving || images.length === 0}
+          className={`text-sm text-orange-500 uppercase tracking-wider flex items-center gap-1 hover:text-orange-400 transition-colors ${
+            isSaving || images.length === 0 ? "opacity-50 cursor-not-allowed" : ""
+          }`}
+        >
+          {isSaving ? (
+            <>
+              <div className="h-3 w-3 border border-orange-500 border-t-transparent rounded-full animate-spin"></div>
+              Exporting...
+            </>
+          ) : (
+            <>
+              Export
+              <ExternalLink size={14} />
+            </>
+          )}
+        </button>
+      </header>
 
-            {saveError && <div className="mt-3 text-red-500 text-sm">{saveError}</div>}
+      {/* Moodboard Grid */}
+      <div className={`moodboard-grid images-${images.length} p-2`}>
+        {isLoading
+          ? // Loading state
+            Array(images.length || 7)
+              .fill(null)
+              .map((_, index) => (
+                <div
+                  key={`loading-${index}`}
+                  className={`image-${index + 1} bg-secondary animate-pulse rounded-sm`}
+                ></div>
+              ))
+          : // Images
+            images.map((image, index) => (
+              <motion.div
+                key={image.id}
+                className={`image-${index + 1} overflow-hidden rounded-sm relative`}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.5, delay: index * 0.05 }}
+              >
+                <img
+                  src={image.url || "/placeholder.svg"}
+                  alt={image.tag}
+                  className="w-full h-full object-cover"
+                  loading="eager"
+                />
 
-            <div className="mt-3 text-xs text-gray-500 max-w-md text-center">
-              Note: Due to browser security restrictions, some images may not appear in the downloaded moodboard.
-            </div>
-          </motion.div>
+                {/* Image hover controls */}
+                <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity duration-200 bg-black/40 z-10">
+                  <div className="flex gap-3">
+                    <button
+                      className="w-10 h-10 rounded-full bg-black/80 flex items-center justify-center text-orange-500 hover:scale-110 transition-transform"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        toggleLock(image.id)
+                      }}
+                      title={image.isLocked ? "Unlock image" : "Lock image"}
+                    >
+                      {image.isLocked ? <Lock size={18} /> : <Unlock size={18} />}
+                    </button>
 
-          <motion.div
-            className="mt-6 text-center text-sm text-gray-600"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5, delay: 0.3 }}
-          >
-            {isSimilaritySearchActive ? (
-              <div className="flex items-center justify-center gap-2">
-                <span className="inline-block px-2 py-1 bg-violet-100 text-violet-800 rounded-full">
-                  Similarity search active
-                </span>
-                <span>•</span>
-                <span>Press spacebar to refresh with similar images</span>
-              </div>
-            ) : (
-              <div>
-                Press spacebar to refresh images
-                {selectedTag && (
-                  <span>
-                    {" "}
-                    with tag: <strong>{selectedTag}</strong>
-                  </span>
+                    <button
+                      className="w-10 h-10 rounded-full bg-black/80 flex items-center justify-center text-green-500 hover:scale-110 transition-transform"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        addImage()
+                      }}
+                      title="Add new image"
+                      disabled={images.length >= 12}
+                      style={{ opacity: images.length >= 12 ? 0.5 : 1 }}
+                    >
+                      <Plus size={18} />
+                    </button>
+
+                    <button
+                      className="w-10 h-10 rounded-full bg-black/80 flex items-center justify-center text-red-500 hover:scale-110 transition-transform"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        removeImage(image.id)
+                      }}
+                      title="Remove image"
+                      disabled={images.length <= 1}
+                      style={{ opacity: images.length <= 1 ? 0.5 : 1 }}
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Optional: Tag overlay on hover */}
+                <div className="absolute inset-0 bg-black/0 hover:bg-black/40 transition-colors flex items-end">
+                  <div className="p-2 w-full transform translate-y-full hover:translate-y-0 transition-transform">
+                    <div className="text-xs text-white/80">{image.tag}</div>
+                  </div>
+                </div>
+
+                {/* Lock indicator */}
+                {image.isLocked && (
+                  <div className="absolute top-2 left-2 bg-black/70 text-orange-500 p-1 rounded-full">
+                    <Lock size={14} />
+                  </div>
                 )}
-              </div>
-            )}
-          </motion.div>
+              </motion.div>
+            ))}
+      </div>
+
+      {/* Add image button at the bottom */}
+      {!isLoading && images.length < 12 && (
+        <div className="fixed bottom-4 right-4">
+          <button
+            onClick={addImage}
+            className="bg-primary text-primary-foreground rounded-full p-3 shadow-lg hover:bg-primary/90 transition-colors"
+            title="Add new image"
+          >
+            <Plus size={20} />
+          </button>
         </div>
-      </main>
-    </DndProvider>
+      )}
+
+      {/* Error message */}
+      {saveError && (
+        <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-destructive text-destructive-foreground px-4 py-2 rounded-md text-sm">
+          {saveError}
+        </div>
+      )}
+    </main>
   )
 }
-
