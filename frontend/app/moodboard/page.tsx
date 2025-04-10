@@ -1,13 +1,8 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { DndProvider } from "react-dnd"
-import { HTML5Backend } from "react-dnd-html5-backend"
-import { Download, ArrowLeft } from "lucide-react"
-import { motion, AnimatePresence } from "framer-motion"
-import Link from "next/link"
-import axios from 'axios';
 import { Search, ExternalLink, Lock, Plus, X, Unlock } from "lucide-react"
+import { motion, AnimatePresence } from "framer-motion"
 
 const tagCategories = {
   Mediums: [
