@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { Search, ExternalLink, Lock, Plus, X, Unlock } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
+import { set } from "date-fns"
 
 const tagCategories = {
   Mediums: [
@@ -136,13 +137,13 @@ const tagCategories = {
 
 const allTags = Object.values(tagCategories).flat()
 
-const generateMockImages = async (searchQuery = "", count = 7) => {
+const generateMockImages = async (searchQuery = "", count) => {
   let fetchedImages = [];
 
   try {
     console.log(`Searching for images with query: ${searchQuery}`);
     
-    const url = `${window.location.origin}/api/search?query=${searchQuery}`.replace('3000', '8000')
+    const url = `${window.location.origin}/api/search?query=${searchQuery}&count=${count}`.replace('3000', '8000')
 
     const response = await fetch(url, {
       method: "GET",
@@ -176,9 +177,8 @@ const generateMockImages = async (searchQuery = "", count = 7) => {
       isLocked: false,
       position: index,
     }));
-
     console.log("fetchedImages", fetchedImages);
-    return fetchedImages;
+    return fetchedImages.slice(0, count);
   } catch (error) {
     console.log("Error fetching images:", error);
     return Array(7)
@@ -235,10 +235,10 @@ export default function MoodboardGenerator() {
       console.log("initialImages", initialImages)
       setIsLoading(false)
     })()
-    const timer = setTimeout(() => {
-      setShowSpacebarHint(false)
-    }, 5000)
-    return () => clearTimeout(timer)
+    // const timer = setTimeout(() => {
+    //   setShowSpacebarHint(false)
+    // }, 5000)
+    // return () => clearTimeout(timer)
   }, [])
 
   useEffect(() => {
@@ -279,7 +279,7 @@ export default function MoodboardGenerator() {
         console.log("backspace clicked")
       }
     },
-    [searchQuery],
+    [searchQuery, images],
   )
 
   useEffect(() => {
@@ -291,18 +291,12 @@ export default function MoodboardGenerator() {
 
   const refreshImages = ( ) => {
     setIsLoading(true)
-    setShowSpacebarHint(false)
 
     setTimeout(async () => {
-      const lockedImages = images.filter((img) => img.isLocked);
+      const lockedImages = images.filter((img) => img.isLocked)
+      const newImages = await generateMockImages(searchQuery, images.length - lockedImages.length);
     
-      const currentCount = images.length;
-      const newImagesCount = currentCount - lockedImages.length;
-      console.log("newImagesCount", newImagesCount);
-    
-      const newImages = await generateMockImages(searchQuery, newImagesCount);
-    
-      setImages([...lockedImages, ...newImages]);
+      setImages(lockedImages.concat(newImages))
       setIsLoading(false);
     }, 300);
   }
@@ -329,9 +323,9 @@ export default function MoodboardGenerator() {
     }
 
     setIsLoading(true)
-    setTimeout(() => {
-      const newImage = generateMockImages(searchQuery, 1)[0]
-      setImages((prevImages) => [...prevImages, newImage])
+    setTimeout(async() => {
+      const newImage = await generateMockImages(searchQuery, 1)
+      setImages((prevImages) => [...prevImages, newImage[0]])
       setIsLoading(false)
     }, 300)
   }

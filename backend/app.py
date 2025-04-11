@@ -29,20 +29,23 @@ class LockRequest(BaseModel):
     image_path: str  # Assuming your frontend sends 'imageId' in the body
 
 @app.get("/api/search")
-async def search(query: str):
+async def search(query: str, count: int = 12):
+    print('search query = ', query, ' and count = ', count)
+    if query == "":
+        query = "default"
     global locked_embedding
     if locked_embedding is not None:
         distances, indices = index.search(locked_embedding, k=100)
         top_k_indices = indices[0].tolist()
-        if len(top_k_indices) <= 7:
+        if len(top_k_indices) <= count:
             selected_indices = top_k_indices
         else:
-            selected_indices = random.sample(top_k_indices, 7)
+            selected_indices = random.sample(top_k_indices, count)
         return {"images": [metadata[i]["path"] for i in selected_indices]}
         # return {"images": [metadata[i]["path"] for i in indices[0]]}
     query_tags = query.split(",")
     matches = [i for i, meta in enumerate(metadata) if any(tag in meta["tags"] for tag in query_tags)]
-    sample_indices = random.sample(matches, min(7, len(matches)))
+    sample_indices = random.sample(matches, min(count, len(matches)))
     return {"images": [metadata[i]["path"] for i in sample_indices]}
 
 @app.post("/api/lock")
