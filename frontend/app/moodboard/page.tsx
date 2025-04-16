@@ -1,10 +1,10 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { Search, ExternalLink, Lock, Plus, X, Unlock } from "lucide-react"
+import { Search, ExternalLink, Lock, Plus, X, Unlock, GripVertical } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
-import { set } from "date-fns"
 
+// Tag categories structure
 const tagCategories = {
   Mediums: [
     "illustration",
@@ -224,6 +224,8 @@ export default function MoodboardGenerator() {
   const [showSpacebarHint, setShowSpacebarHint] = useState(true)
   const [filteredTags, setFilteredTags] = useState<string[]>([])
   const [isSearchFocused, setIsSearchFocused] = useState(false)
+  const [draggedImage, setDraggedImage] = useState<({ id: string; url: string; tag: string; isLocked: boolean; position: number } | null)>()
+  const [draggedOverImage, setDraggedOverImage] = useState<({ id: string; url: string; tag: string; isLocked: boolean; position: number } | null)>()
 
   const searchInputRef = useRef<HTMLInputElement>(null)
   const suggestionsRef = useRef<HTMLDivElement>(null)
@@ -235,10 +237,6 @@ export default function MoodboardGenerator() {
       console.log("initialImages", initialImages)
       setIsLoading(false)
     })()
-    // const timer = setTimeout(() => {
-    //   setShowSpacebarHint(false)
-    // }, 5000)
-    // return () => clearTimeout(timer)
   }, [])
 
   useEffect(() => {
@@ -252,7 +250,6 @@ export default function MoodboardGenerator() {
     setFilteredTags(filtered)
   }, [searchQuery])
 
-  // Handle click outside to close suggestions
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -294,9 +291,12 @@ export default function MoodboardGenerator() {
 
     setTimeout(async () => {
       const lockedImages = images.filter((img) => img.isLocked)
-      const newImages = await generateMockImages(searchQuery, images.length - lockedImages.length);
-    
-      setImages(lockedImages.concat(newImages))
+      const newImages = await generateMockImages(searchQuery, images.length);
+
+      const updatedImages = images.map((img, index) => {
+        return img.isLocked ? img : newImages[index]
+      })
+      setImages(updatedImages)
       setIsLoading(false);
     }, 300);
   }
@@ -336,6 +336,57 @@ export default function MoodboardGenerator() {
     }
 
     setImages((prevImages) => prevImages.filter((img) => img.id !== id))
+  }
+
+  // Handle drag start
+  const handleDragStart = (e, image) => {
+    setDraggedImage(image)
+    // For better drag preview in some browsers
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = "move"
+      // Create a transparent drag image
+      const dragImg = document.createElement("canvas")
+      dragImg.width = 0
+      dragImg.height = 0
+      e.dataTransfer.setDragImage(dragImg, 0, 0)
+    }
+  }
+
+  // Handle drag over
+  const handleDragOver = (e, image) => {
+    e.preventDefault()
+    if (draggedImage && draggedImage.id !== image.id) {
+      setDraggedOverImage(image)
+    }
+  }
+
+  // Handle drop
+  const handleDrop = (e) => {
+    e.preventDefault()
+    if (draggedImage && draggedOverImage && draggedImage.id !== draggedOverImage.id) {
+      setImages((prevImages) => {
+        const newImages = [...prevImages]
+        const draggedIndex = newImages.findIndex((img) => img.id === draggedImage.id)
+        const dropIndex = newImages.findIndex((img) => img.id === draggedOverImage.id)
+
+        // Simple swap of two images
+        const temp = newImages[draggedIndex]
+        newImages[draggedIndex] = newImages[dropIndex]
+        newImages[dropIndex] = temp
+
+        return newImages
+      })
+    }
+
+    // Reset drag state
+    setDraggedImage(null)
+    setDraggedOverImage(null)
+  }
+
+  // Handle drag end
+  const handleDragEnd = () => {
+    setDraggedImage(null)
+    setDraggedOverImage(null)
   }
 
   const handleExport = async () => {
@@ -506,7 +557,7 @@ export default function MoodboardGenerator() {
   return (
     <main className="min-h-screen bg-background text-foreground overflow-hidden">
       <header className="h-16 px-4 flex items-center justify-between border-b border-border">
-        <div className="relative w-72">
+        <div className="relative w-72" style={{ zIndex: 50 }}>
           <form onSubmit={handleSearchSubmit} className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search className="h-4 w-4 text-muted-foreground" />
@@ -601,10 +652,17 @@ export default function MoodboardGenerator() {
             images.map((image, index) => (
               <motion.div
                 key={image.id}
-                className={`image-${index + 1} overflow-hidden rounded-sm relative`}
+                className={`image-${index + 1} overflow-hidden rounded-sm relative group/image ${
+                  draggedImage && draggedImage.id === image.id ? "opacity-50" : ""
+                } ${draggedOverImage && draggedOverImage.id === image.id ? "border-2 border-primary" : ""}`}
                 initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.5, delay: index * 0.05 }}
+                animate={{ opacity: draggedImage && draggedImage.id === image.id ? 0.5 : 1 }}
+                transition={{ duration: 0.3 }}
+                draggable="true"
+                onDragStart={(e) => handleDragStart(e, image)}
+                onDragOver={(e) => handleDragOver(e, image)}
+                onDrop={handleDrop}
+                onDragEnd={handleDragEnd}
               >
                 <img
                   src={image.url || "/placeholder.svg"}
@@ -612,6 +670,11 @@ export default function MoodboardGenerator() {
                   className="w-full h-full object-cover"
                   loading="eager"
                 />
+
+                {/* Drag handle */}
+                <div className="absolute top-2 right-2 w-8 h-8 bg-black/70 rounded-full flex items-center justify-center cursor-grab active:cursor-grabbing opacity-0 group-hover/image:opacity-100 transition-opacity">
+                  <GripVertical size={16} className="text-white/80" />
+                </div>
 
                 {/* Image hover controls */}
                 <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity duration-200 bg-black/40 z-10">
