@@ -39,7 +39,12 @@ TAGS = [
     "billboard", "pitch deck", "logo system", "ad campaign"
 ]
 
+# Load CLIP model and processor
+model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(DEVICE)
+processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+
 # Preprocessing for DINOv2
+dinov2 = torch.hub.load('facebookresearch/dinov2', 'dinov2_vitb14').to(DEVICE).eval()
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
@@ -48,7 +53,6 @@ transform = transforms.Compose([
 
 def generate_embeddings(image_paths, output_file):
     """Generate DINOv2 embeddings for all images."""
-    dinov2 = torch.hub.load('facebookresearch/dinov2', 'dinov2_vitb14').to(DEVICE).eval()
     embeddings = []
     
     print("Generating embeddings...")
@@ -92,9 +96,6 @@ def index_embeddings(embeddings, output_file):
 
 def tag_images(image_paths, output_file):
     """Tag images with CLIP (zero-shot)."""
-    model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(DEVICE)
-    processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
-    
     metadata = []
     print("Tagging images...")
     for path in tqdm(image_paths, desc="Tagging"):
@@ -103,8 +104,8 @@ def tag_images(image_paths, output_file):
             inputs = processor(text=TAGS, images=image, return_tensors="pt", padding=True).to(DEVICE)
             with torch.no_grad():
                 outputs = model(**inputs)
-            logits_per_image = outputs.logits_per_image
-            probs = logits_per_image.softmax(dim=1).cpu().numpy()[0]
+                logits_per_image = outputs.logits_per_image
+                probs = logits_per_image.softmax(dim=1).cpu().numpy()[0]
             top_tags = [TAGS[i] for i in np.argsort(probs)[-3:]]  # Top 3 tags
             metadata.append({"path": path, "tags": top_tags})
         except Exception as e:
@@ -120,7 +121,7 @@ def main():
 
     # Step 1: Collect image paths
     image_paths = [os.path.join(IMAGE_DIR, f) for f in os.listdir(IMAGE_DIR) 
-                   if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+        if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
     if not image_paths:
         raise ValueError(f"No images found in {IMAGE_DIR}")
     print(f"Found {len(image_paths)} images.")
