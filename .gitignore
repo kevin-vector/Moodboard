@@ -6,3 +6,6 @@ data
 data
 __pycache__
 *.pyc
+generate_all*.py
+*main*.py
+models
