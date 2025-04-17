@@ -230,3 +230,55 @@ body {
     aspect-ratio: 1 / 1;
   }
 }
+
+/* Add these styles at the end of the file */
+
+/* Drag and drop animations */
+@keyframes pulse-border {
+  0%,
+  100% {
+    border-color: hsl(var(--primary) / 0.5);
+  }
+  50% {
+    border-color: hsl(var(--primary));
+  }
+}
+
+.moodboard-grid [draggable="true"] {
+  transition: transform 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease;
+}
+
+.moodboard-grid [draggable="true"]:active {
+  cursor: grabbing;
+}
+
+/* Add smooth transitions for all images */
+.moodboard-grid img {
+  transition: all 0.3s ease;
+}
+
+/* Enhance the hover effect */
+.moodboard-grid [draggable="true"]:hover {
+  z-index: 10;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+}
+
+/* Add a subtle animation for the drop target */
+.moodboard-grid [draggable="true"].drop-target {
+  animation: pulse-border 1.5s infinite;
+}
+
+/* Add a subtle animation for the drag preview */
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-5px) rotate(1deg);
+  }
+}
+
+.drag-preview {
+  animation: float 2s infinite ease-in-out;
+}

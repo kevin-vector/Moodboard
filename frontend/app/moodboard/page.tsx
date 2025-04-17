@@ -197,22 +197,6 @@ const generateMockImages = async (searchQuery = "", count) => {
   }
 }
 
-const findRelatedTags = (tag: string) => {
-  let tagCategory: string | null = null
-  for (const [category, tags] of Object.entries(tagCategories)) {
-    if (tags.includes(tag)) {
-      tagCategory = category
-      break
-    }
-  }
-
-  if (tagCategory) {
-    return tagCategories[tagCategory as keyof typeof tagCategories].filter((t) => t !== tag)
-  }
-
-  return allTags.filter((t) => t !== tag).slice(0, 10)
-}
-
 export default function MoodboardGenerator() {
   const [images, setImages] = useState<
     ({ id: string; url: string; tag: string; isLocked: boolean; position: number })[]
@@ -226,6 +210,9 @@ export default function MoodboardGenerator() {
   const [isSearchFocused, setIsSearchFocused] = useState(false)
   const [draggedImage, setDraggedImage] = useState<({ id: string; url: string; tag: string; isLocked: boolean; position: number } | null)>()
   const [draggedOverImage, setDraggedOverImage] = useState<({ id: string; url: string; tag: string; isLocked: boolean; position: number } | null)>()
+  const [isDragging, setIsDragging] = useState(false)
+  const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 })
+  const [originalIndex, setOriginalIndex] = useState(null)
 
   const searchInputRef = useRef<HTMLInputElement>(null)
   const suggestionsRef = useRef<HTMLDivElement>(null)
@@ -273,7 +260,6 @@ export default function MoodboardGenerator() {
       if (e.code === "Space" && document.activeElement !== searchInputRef.current) {
         e.preventDefault()
         refreshImages()
-        console.log("backspace clicked")
       }
     },
     [searchQuery, images],
@@ -290,7 +276,6 @@ export default function MoodboardGenerator() {
     setIsLoading(true)
 
     setTimeout(async () => {
-      const lockedImages = images.filter((img) => img.isLocked)
       const newImages = await generateMockImages(searchQuery, images.length);
 
       const updatedImages = images.map((img, index) => {
@@ -339,8 +324,18 @@ export default function MoodboardGenerator() {
   }
 
   // Handle drag start
-  const handleDragStart = (e, image) => {
+  const handleDragStart = (e, image, index) => {
+    e.stopPropagation()
     setDraggedImage(image)
+    setOriginalIndex(index)
+    setIsDragging(true)
+
+    // Store initial cursor position
+    setDragPosition({
+      x: e.clientX,
+      y: e.clientY,
+    })
+
     // For better drag preview in some browsers
     if (e.dataTransfer) {
       e.dataTransfer.effectAllowed = "move"
@@ -348,32 +343,46 @@ export default function MoodboardGenerator() {
       const dragImg = document.createElement("canvas")
       dragImg.width = 0
       dragImg.height = 0
+      document.body.appendChild(dragImg)
       e.dataTransfer.setDragImage(dragImg, 0, 0)
+      setTimeout(() => document.body.removeChild(dragImg), 0)
     }
   }
 
   // Handle drag over
-  const handleDragOver = (e, image) => {
+  const handleDragOver = (e, image, index) => {
     e.preventDefault()
+    e.stopPropagation()
+
     if (draggedImage && draggedImage.id !== image.id) {
       setDraggedOverImage(image)
     }
+
+    // Update cursor position for custom drag preview
+    setDragPosition({
+      x: e.clientX,
+      y: e.clientY,
+    })
+
+    return false
   }
 
   // Handle drop
-  const handleDrop = (e) => {
+  const handleDrop = (e, targetIndex) => {
     e.preventDefault()
-    if (draggedImage && draggedOverImage && draggedImage.id !== draggedOverImage.id) {
+    e.stopPropagation()
+
+    if (!draggedImage) return
+
+    const sourceIndex = images.findIndex((img) => img.id === draggedImage.id)
+
+    // Only perform the swap if we're dropping on a different image
+    if (sourceIndex !== targetIndex) {
       setImages((prevImages) => {
         const newImages = [...prevImages]
-        const draggedIndex = newImages.findIndex((img) => img.id === draggedImage.id)
-        const dropIndex = newImages.findIndex((img) => img.id === draggedOverImage.id)
-
-        // Simple swap of two images
-        const temp = newImages[draggedIndex]
-        newImages[draggedIndex] = newImages[dropIndex]
-        newImages[dropIndex] = temp
-
+        const temp = newImages[sourceIndex]
+        newImages[sourceIndex] = newImages[targetIndex]
+        newImages[targetIndex] = temp
         return newImages
       })
     }
@@ -381,13 +390,44 @@ export default function MoodboardGenerator() {
     // Reset drag state
     setDraggedImage(null)
     setDraggedOverImage(null)
+    setOriginalIndex(null)
+    setIsDragging(false)
+
+    return false
   }
 
-  // Handle drag end
-  const handleDragEnd = () => {
+  // Handle drag end (including cases where the drop didn't happen on a valid target)
+  const handleDragEnd = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    // Reset all drag state
     setDraggedImage(null)
     setDraggedOverImage(null)
+    setOriginalIndex(null)
+    setIsDragging(false)
   }
+
+  // Add a new function to track mouse movement during drag
+  const handleMouseMove = useCallback(
+    (e) => {
+      if (isDragging) {
+        setDragPosition({
+          x: e.clientX,
+          y: e.clientY,
+        })
+      }
+    },
+    [isDragging],
+  )
+
+  // Add event listener for mouse movement
+  useEffect(() => {
+    window.addEventListener("mousemove", handleMouseMove)
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove)
+    }
+  }, [handleMouseMove])
 
   const handleExport = async () => {
     if (images.length === 0 || isSaving) return
@@ -637,7 +677,7 @@ export default function MoodboardGenerator() {
       </header>
 
       {/* Moodboard Grid */}
-      <div className={`moodboard-grid images-${images.length} p-2`}>
+      <div className={`moodboard-grid images-${images.length} p-2 group`}>
         {isLoading
           ? // Loading state
             Array(images.length || 7)
@@ -648,26 +688,42 @@ export default function MoodboardGenerator() {
                   className={`image-${index + 1} bg-secondary animate-pulse rounded-sm`}
                 ></div>
               ))
-          : // Images
-            images.map((image, index) => (
-              <motion.div
-                key={image.id}
-                className={`image-${index + 1} overflow-hidden rounded-sm relative group/image ${
-                  draggedImage && draggedImage.id === image.id ? "opacity-50" : ""
-                } ${draggedOverImage && draggedOverImage.id === image.id ? "border-2 border-primary" : ""}`}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: draggedImage && draggedImage.id === image.id ? 0.5 : 1 }}
-                transition={{ duration: 0.3 }}
-                draggable="true"
-                onDragStart={(e) => handleDragStart(e, image)}
-                onDragOver={(e) => handleDragOver(e, image)}
-                onDrop={handleDrop}
-                onDragEnd={handleDragEnd}
-              >
+              : images.map((image, index) => (
+                <motion.div
+                  key={image.id}
+                  className={`image-${index + 1} overflow-hidden rounded-sm relative group/image ${
+                    draggedImage && draggedImage.id === image.id
+                      ? "opacity-50 scale-95 ring-2 ring-primary shadow-lg"
+                      : ""
+                  } ${
+                    draggedOverImage && draggedOverImage.id === image.id
+                      ? "border-2 border-primary bg-primary/10 scale-105 shadow-xl"
+                      : ""
+                  }`}
+                  initial={{ opacity: 0 }}
+                  animate={{
+                    opacity: draggedImage && draggedImage.id === image.id ? 0.6 : 1,
+                    scale:
+                      draggedImage && draggedImage.id === image.id
+                        ? 0.95
+                        : draggedOverImage && draggedOverImage.id === image.id
+                          ? 1.05
+                          : 1,
+                    transition: { duration: 0.2 },
+                  }}
+                  transition={{ duration: 0.3 }}
+                  draggable={true}
+                  onDragStart={(e) => handleDragStart(e, image, index)}
+                  onDragOver={(e) => handleDragOver(e, image, index)}
+                  onDrop={(e) => handleDrop(e, index)}
+                  onDragEnd={handleDragEnd}
+                >
                 <img
                   src={image.url || "/placeholder.svg"}
                   alt={image.tag}
-                  className="w-full h-full object-cover"
+                  className={`w-full h-full object-cover transition-all duration-300 ${
+                    draggedOverImage && draggedOverImage.id === image.id ? "brightness-110" : ""
+                  }`}
                   loading="eager"
                 />
 
@@ -737,11 +793,12 @@ export default function MoodboardGenerator() {
 
       {/* Add image button at the bottom */}
       {!isLoading && images.length < 12 && (
-        <div className="fixed bottom-4 right-4">
+        <div className="fixed bottom-4 right-4 z-50">
           <button
             onClick={addImage}
             className="bg-primary text-primary-foreground rounded-full p-3 shadow-lg hover:bg-primary/90 transition-colors"
             title="Add new image"
+            style={{ boxShadow: "0 0 10px rgba(0,0,0,0.3)" }}
           >
             <Plus size={20} />
           </button>
@@ -752,6 +809,26 @@ export default function MoodboardGenerator() {
       {saveError && (
         <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-destructive text-destructive-foreground px-4 py-2 rounded-md text-sm">
           {saveError}
+        </div>
+      )}
+
+      {/* Drag preview that follows cursor */}
+      {isDragging && draggedImage && (
+        <div
+          className="fixed pointer-events-none z-50"
+          style={{
+            left: `${dragPosition.x}px`,
+            top: `${dragPosition.y}px`,
+            transform: "translate(-50%, -50%)",
+          }}
+        >
+          <div className="w-16 h-16 rounded-md overflow-hidden shadow-2xl ring-2 ring-primary opacity-80">
+            <img
+              src={draggedImage.url || "/placeholder.svg"}
+              alt="Dragging"
+              className="w-full h-full object-cover"
+            />
+          </div>
         </div>
       )}
     </main>
