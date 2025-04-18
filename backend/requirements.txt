@@ -7,5 +7,4 @@ numpy==1.26.4
 scikit-learn==1.5.1
 faiss-cpu==1.8.0  # Use faiss-gpu if you have a GPU
 pillow==10.4.0
-SQLite
 tqdm==4.66.4
