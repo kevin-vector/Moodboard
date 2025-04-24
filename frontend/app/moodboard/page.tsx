@@ -218,15 +218,6 @@ export default function MoodboardGenerator() {
   const suggestionsRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    (async () => {
-      const initialImages = await generateMockImages("", 7)
-      setImages(initialImages)
-      console.log("initialImages", initialImages)
-      setIsLoading(false)
-    })()
-  }, [])
-
-  useEffect(() => {
     if (!searchQuery.trim()) {
       setFilteredTags([])
       return
@@ -238,6 +229,29 @@ export default function MoodboardGenerator() {
   }, [searchQuery])
 
   useEffect(() => {
+    (async () => {
+      const initialImages = await generateMockImages("", 7)
+      setImages(initialImages)
+      console.log("initialImages", initialImages)
+      setIsLoading(false)
+      try{
+        const url = `${window.location.origin}/api/unlock`.replace('3000', '8000')
+  
+        const response = await fetch(url, {
+          method: "GET",
+        });
+        const data = await response.json();
+        if (data.status === "unlocked") {
+          console.log(data.message);
+        } else {
+          console.error(data.message);
+          alert(`Failed to unlock image: ${data.message}`);
+        }
+      }catch (error) {
+        console.error("Error calling /api/unlock:", error);
+        alert("Network error while unlocking image. Please try again.");
+      }
+    })()
     const handleClickOutside = (event: MouseEvent) => {
       if (
         suggestionsRef.current &&
