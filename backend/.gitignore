@@ -1,0 +1,9 @@
+env
+node_modules
+models
+data
+.venv
+__pycache__
+*.pyc
+data1
+*.bin

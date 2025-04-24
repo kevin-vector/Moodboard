@@ -1,0 +1,284 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 0 0% 7%;
+  --foreground: 0 0% 98%;
+
+  --card: 0 0% 10%;
+  --card-foreground: 0 0% 98%;
+
+  --popover: 0 0% 10%;
+  --popover-foreground: 0 0% 98%;
+
+  --primary: 252 59% 48%;
+  --primary-foreground: 0 0% 98%;
+
+  --secondary: 0 0% 15%;
+  --secondary-foreground: 0 0% 98%;
+
+  --muted: 0 0% 15%;
+  --muted-foreground: 0 0% 60%;
+
+  --accent: 252 59% 48%;
+  --accent-foreground: 0 0% 98%;
+
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 0 0% 98%;
+
+  --border: 0 0% 15%;
+  --input: 0 0% 15%;
+  --ring: 252 59% 48%;
+
+  --radius: 0.5rem;
+}
+
+body {
+  @apply bg-background text-foreground;
+  font-feature-settings: "rlig" 1, "calt" 1;
+}
+
+.search-input::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* Dynamic grid layouts based on image count */
+.moodboard-grid {
+  display: grid;
+  gap: 8px;
+  height: calc(100vh - 80px);
+  width: 100%;
+}
+
+/* Default layout for 7 images */
+.moodboard-grid.images-7 {
+  grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(6, 1fr);
+}
+
+.moodboard-grid.images-7 .image-1 {
+  grid-column: 1 / 5;
+  grid-row: 1 / 4;
+}
+
+.moodboard-grid.images-7 .image-2 {
+  grid-column: 5 / 9;
+  grid-row: 1 / 4;
+}
+
+.moodboard-grid.images-7 .image-3 {
+  grid-column: 1 / 3;
+  grid-row: 4 / 7;
+}
+
+.moodboard-grid.images-7 .image-4 {
+  grid-column: 3 / 5;
+  grid-row: 4 / 7;
+}
+
+.moodboard-grid.images-7 .image-5 {
+  grid-column: 5 / 7;
+  grid-row: 4 / 7;
+}
+
+.moodboard-grid.images-7 .image-6 {
+  grid-column: 7 / 9;
+  grid-row: 4 / 6;
+}
+
+.moodboard-grid.images-7 .image-7 {
+  grid-column: 7 / 9;
+  grid-row: 6 / 7;
+}
+
+/* Layout for 1-3 images */
+.moodboard-grid.images-1 {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+}
+
+.moodboard-grid.images-2 {
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: 1fr;
+}
+
+.moodboard-grid.images-3 {
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: 1fr;
+}
+
+/* Layout for 4-6 images */
+.moodboard-grid.images-4 {
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+}
+
+.moodboard-grid.images-5 {
+  grid-template-columns: repeat(6, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+}
+
+.moodboard-grid.images-5 .image-1 {
+  grid-column: 1 / 4;
+  grid-row: 1 / 3;
+}
+
+.moodboard-grid.images-5 .image-2 {
+  grid-column: 4 / 7;
+  grid-row: 1 / 3;
+}
+
+.moodboard-grid.images-5 .image-3 {
+  grid-column: 1 / 3;
+  grid-row: 3 / 4;
+}
+
+.moodboard-grid.images-5 .image-4 {
+  grid-column: 3 / 5;
+  grid-row: 3 / 4;
+}
+
+.moodboard-grid.images-5 .image-5 {
+  grid-column: 5 / 7;
+  grid-row: 3 / 4;
+}
+
+.moodboard-grid.images-6 {
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+}
+
+/* Layout for 8-12 images */
+.moodboard-grid.images-8 {
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+}
+
+.moodboard-grid.images-9 {
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+}
+
+.moodboard-grid.images-10 {
+  grid-template-columns: repeat(5, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+}
+
+.moodboard-grid.images-11 {
+  grid-template-columns: repeat(6, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+}
+
+.moodboard-grid.images-11 .image-1 {
+  grid-column: 1 / 3;
+  grid-row: 1 / 3;
+}
+
+.moodboard-grid.images-11 .image-2 {
+  grid-column: 3 / 5;
+  grid-row: 1 / 3;
+}
+
+.moodboard-grid.images-11 .image-3 {
+  grid-column: 5 / 7;
+  grid-row: 1 / 3;
+}
+
+.moodboard-grid.images-12 {
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+}
+
+@media (max-width: 768px) {
+  .moodboard-grid {
+    grid-template-columns: repeat(2, 1fr);
+    grid-auto-rows: 1fr;
+    height: auto;
+  }
+
+  .moodboard-grid.images-1,
+  .moodboard-grid.images-2,
+  .moodboard-grid.images-3,
+  .moodboard-grid.images-4,
+  .moodboard-grid.images-5,
+  .moodboard-grid.images-6,
+  .moodboard-grid.images-7,
+  .moodboard-grid.images-8,
+  .moodboard-grid.images-9,
+  .moodboard-grid.images-10,
+  .moodboard-grid.images-11,
+  .moodboard-grid.images-12 {
+    grid-template-columns: repeat(2, 1fr);
+    grid-auto-rows: 1fr;
+  }
+
+  .moodboard-grid .image-1,
+  .moodboard-grid .image-2,
+  .moodboard-grid .image-3,
+  .moodboard-grid .image-4,
+  .moodboard-grid .image-5,
+  .moodboard-grid .image-6,
+  .moodboard-grid .image-7,
+  .moodboard-grid .image-8,
+  .moodboard-grid .image-9,
+  .moodboard-grid .image-10,
+  .moodboard-grid .image-11,
+  .moodboard-grid .image-12 {
+    grid-column: auto;
+    grid-row: auto;
+    aspect-ratio: 1 / 1;
+  }
+}
+
+/* Add these styles at the end of the file */
+
+/* Drag and drop animations */
+@keyframes pulse-border {
+  0%,
+  100% {
+    border-color: hsl(var(--primary) / 0.5);
+  }
+  50% {
+    border-color: hsl(var(--primary));
+  }
+}
+
+.moodboard-grid [draggable="true"] {
+  transition: transform 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease;
+}
+
+.moodboard-grid [draggable="true"]:active {
+  cursor: grabbing;
+}
+
+/* Add smooth transitions for all images */
+.moodboard-grid img {
+  transition: all 0.3s ease;
+}
+
+/* Enhance the hover effect */
+.moodboard-grid [draggable="true"]:hover {
+  z-index: 10;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+}
+
+/* Add a subtle animation for the drop target */
+.moodboard-grid [draggable="true"].drop-target {
+  animation: pulse-border 1.5s infinite;
+}
+
+/* Add a subtle animation for the drag preview */
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-5px) rotate(1deg);
+  }
+}
+
+.drag-preview {
+  animation: float 2s infinite ease-in-out;
+}
