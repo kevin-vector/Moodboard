@@ -1,7 +1,7 @@
-fastapi==0.115.0
-uvicorn==0.30.6
 torch==2.2.2
 torchvision==0.17.2
+fastapi==0.115.0
+uvicorn==0.30.6
 transformers==4.44.2
 numpy==1.26.4
 scikit-learn==1.5.1
