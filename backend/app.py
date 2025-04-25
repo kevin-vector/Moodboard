@@ -66,6 +66,7 @@ except Exception as e:
 locked_dino_embedding = None
 locked_clip_embedding = None
 locked_tags = None
+locked_path = ''
 
 class LockRequest(BaseModel):
     image_path: str  # Assuming your frontend sends 'imageId' in the body
@@ -75,9 +76,10 @@ async def search(query: str, count: int = 12):
     print('search query = ', query, ' and count = ', count)
     if query == "":
         query = "default"
-    global locked_dino_embedding, locked_clip_embedding, locked_tags
+    global locked_dino_embedding, locked_clip_embedding, locked_tags, locked_path
     try:
         if locked_dino_embedding is not None and locked_clip_embedding is not None:
+            print('locked_path is ', locked_path)
             # Hybrid similarity search
             dino_index.hnsw.efSearch = 100
             clip_index.hnsw.efSearch = 100
@@ -100,6 +102,9 @@ async def search(query: str, count: int = 12):
             candidates = cursor.fetchall()
             candidate_paths = {row[0]: row[1] for row in candidates}
             candidate_tags = {row[0]: json.loads(row[2]) for row in candidates}
+            if locked_path:
+                candidate_ids = {cid for cid in candidate_ids if candidate_paths.get(cid) != locked_path}
+                print(f"Excluded locked image with path {locked_path} from candidates")
             print(f"Found {len(candidate_ids)} candidates in hybrid search")
 
             # Compute hybrid scores
@@ -117,18 +122,10 @@ async def search(query: str, count: int = 12):
                     clip_score = 1 / (1 + clip_distances[0][idx])
                 scores[cid] = DINO_WEIGHT * dino_score + CLIP_WEIGHT * clip_score
             
-            # Filter by style tags
-            style_tags = [tag for tag in (locked_tags or []) if tag not in ["black & white", "monochrome", "neon", "pastel", "vivid", "muted"]]
-            if not style_tags:
-                style_tags = locked_tags or []
-            try:
-                filtered_ids = [
-                    cid for cid in scores
-                    if cid in candidate_tags and any(tag in candidate_tags[cid] for tag in style_tags)
-                ]
-            except Exception as e:
-                print(f"Error filtering candidates: {e}")
-                filtered_ids = []
+            # Use all candidates (no tag filtering)
+            filtered_ids = list(scores.keys())
+            print(f"Proceeding with {len(filtered_ids)} candidates after excluding locked image")
+
             # Cluster for diversity
             if len(filtered_ids) > count:
                 candidate_embeddings = np.array([dino_index.reconstruct(int(idx)) for idx in range(len(dino_indices[0])) if dino_ids[idx] in filtered_ids])
@@ -142,21 +139,20 @@ async def search(query: str, count: int = 12):
                         cluster_indices = [i for i, label in enumerate(cluster_labels) if label == cluster]
                         if cluster_indices:
                             selected_ids.append(filtered_ids[cluster_indices[0]])
-                        if len(selected_ids) < count:
-                            remaining_candidates = [cid for cid in filtered_ids if cid not in selected_ids]
-                            if remaining_candidates:
-                                remaining_with_scores = [(cid, scores[cid]) for cid in remaining_candidates]
-                                remaining_with_scores.sort(key=lambda x: x[1], reverse=True)
-                                remaining_needed = count - len(selected_ids)
-                                for cid, _ in remaining_with_scores[:remaining_needed]:
-                                    selected_ids.append(cid)
+                    if len(selected_ids) < count:
+                        remaining_candidates = [cid for cid in filtered_ids if cid not in selected_ids]
+                        if remaining_candidates:
+                            remaining_with_scores = [(cid, scores[cid]) for cid in remaining_candidates]
+                            remaining_with_scores.sort(key=lambda x: x[1], reverse=True)
+                            remaining_needed = count - len(selected_ids)
+                            for cid, _ in remaining_with_scores[:remaining_needed]:
+                                selected_ids.append(cid)
                     selected_ids = selected_ids[:count]
             else:
                 selected_ids = filtered_ids[:count]
 
-
             paths = [candidate_paths[cid] for cid in selected_ids if cid in candidate_paths]
-            print(f"Hybrid search with tags {style_tags} returned {len(paths)} images")
+            print(f"Hybrid search returned {len(paths)} images")
             print(paths)
             return {"images": paths}
         
@@ -195,7 +191,7 @@ async def search(query: str, count: int = 12):
 @app.post("/api/lock")
 async def lock(request_body: LockRequest):
     image_path = request_body.image_path
-    global locked_dino_embedding, locked_clip_embedding, locked_tags
+    global locked_dino_embedding, locked_clip_embedding, locked_tags, locked_path
     try:        
         cursor.execute("SELECT image_id, tags FROM images WHERE path = ?", (image_path,))
         result = cursor.fetchone()
@@ -205,6 +201,7 @@ async def lock(request_body: LockRequest):
         
         image_id, tags_json = result
         locked_tags = json.loads(tags_json)
+        locked_path = image_path
         
         faiss_idx = None
         for idx, mapped_id in id_map.items():
@@ -227,10 +224,11 @@ async def lock(request_body: LockRequest):
 
 @app.get("/api/unlock")
 async def unlock():
-    global locked_dino_embedding, locked_clip_embedding, locked_tags
+    global locked_dino_embedding, locked_clip_embedding, locked_tags, locked_path
     locked_dino_embedding = None
     locked_clip_embedding = None
     locked_tags = None
+    locked_path = ''
     print("Unlocked all images")
     return {"status": "unlocked", "message": "Unlocked all images"}
 
