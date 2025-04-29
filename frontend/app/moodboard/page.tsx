@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { Search, ExternalLink, Lock, Plus, X, Unlock, GripVertical } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
+import { Content } from "next/font/google"
 
 // Tag categories structure
 const tagCategories = {
@@ -164,15 +165,17 @@ const generateMockImages = async (searchQuery = "", count) => {
         return {
           id: `img-${Date.now()}-${index}`,
           url: `sample${index + 1}.png`,
+          content: 'none',
           tag: randomTag,
           isLocked: false,
           position: index,
         }
       })
     }
-    fetchedImages = result.images.map((url: string, index: number) => ({
+    fetchedImages = result.images.map((url: {url: String, content: String}, index: number) => ({
       id: `img-${Date.now()}-${index}`,
-      url: url,
+      url: url.url,
+      content: url.content,
       tag: searchQuery,
       isLocked: false,
       position: index,
@@ -189,6 +192,7 @@ const generateMockImages = async (searchQuery = "", count) => {
       return {
         id: `img-${Date.now()}-${index}`,
         url: `sample${index + 1}.png`,
+        content: 'none',
         tag: randomTag,
         isLocked: false,
         position: index,
@@ -199,7 +203,7 @@ const generateMockImages = async (searchQuery = "", count) => {
 
 export default function MoodboardGenerator() {
   const [images, setImages] = useState<
-    ({ id: string; url: string; tag: string; isLocked: boolean; position: number })[]
+    ({ id: string; url: string; content: string; tag: string; isLocked: boolean; position: number })[]
   >([])
   const [searchQuery, setSearchQuery] = useState("")
   const [isLoading, setIsLoading] = useState(true)
@@ -208,8 +212,8 @@ export default function MoodboardGenerator() {
   const [showSpacebarHint, setShowSpacebarHint] = useState(true)
   const [filteredTags, setFilteredTags] = useState<string[]>([])
   const [isSearchFocused, setIsSearchFocused] = useState(false)
-  const [draggedImage, setDraggedImage] = useState<({ id: string; url: string; tag: string; isLocked: boolean; position: number } | null)>()
-  const [draggedOverImage, setDraggedOverImage] = useState<({ id: string; url: string; tag: string; isLocked: boolean; position: number } | null)>()
+  const [draggedImage, setDraggedImage] = useState<({ id: string; url: string; content:string; tag: string; isLocked: boolean; position: number } | null)>()
+  const [draggedOverImage, setDraggedOverImage] = useState<({ id: string; url: string; content:string; tag: string; isLocked: boolean; position: number } | null)>()
   const [isDragging, setIsDragging] = useState(false)
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 })
   const [originalIndex, setOriginalIndex] = useState(null)
@@ -799,7 +803,7 @@ export default function MoodboardGenerator() {
                   onDragEnd={handleDragEnd}
                 >
                 <img
-                  src={image.url || "/placeholder.svg"}
+                  src={image.content || "/placeholder.svg"}
                   alt={image.tag}
                   className={`w-full h-full object-cover transition-all duration-300 ${
                     draggedOverImage && draggedOverImage.id === image.id ? "brightness-110" : ""

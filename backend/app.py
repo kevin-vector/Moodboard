@@ -10,6 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import sqlite3
 from sklearn.cluster import KMeans
+import base64
+from io import BytesIO
 
 app = FastAPI()
 
@@ -77,6 +79,7 @@ async def search(query: str, count: int = 12):
     if query == "":
         query = "default"
     global locked_dino_embedding, locked_clip_embedding, locked_tags, locked_path
+    paths = []
     try:
         if locked_dino_embedding is not None and locked_clip_embedding is not None:
             print('locked_path is ', locked_path)
@@ -154,35 +157,56 @@ async def search(query: str, count: int = 12):
             paths = [candidate_paths[cid] for cid in selected_ids if cid in candidate_paths]
             print(f"Hybrid search returned {len(paths)} images")
             print(paths)
-            return {"images": paths}
-        
-        # Tag-based search
-        query_tags = [tag.strip().lower() for tag in query.split(",") if tag.strip()]
-        if not query_tags:
-            print("Empty query; returning random images")
-            cursor.execute("SELECT path FROM images ORDER BY RANDOM() LIMIT ?", (count,))
-            paths = [row[0] for row in cursor.fetchall()]
-            return {"images": paths}
-        
-        query_placeholders = ",".join("?" * len(query_tags))
-        cursor.execute(f"""
-            SELECT path FROM images
-            WHERE EXISTS (
-                SELECT 1 FROM json_each(tags)
-                WHERE lower(json_each.value) IN ({query_placeholders})
-            )
-        """, query_tags)
-        matches = [row[0] for row in cursor.fetchall()]
-        
-        if not matches:
-            print("No matches found for query; returning random images")
-            cursor.execute("SELECT path FROM images ORDER BY RANDOM() LIMIT ?", (count,))
-            paths = [row[0] for row in cursor.fetchall()]
+            # return {"images": paths}
         else:
-            paths = random.sample(matches, min(count, len(matches)))
         
-        print(f"Tag search for '{query}' returned {len(paths)} images")
-        print(paths)
+            # Tag-based search
+            query_tags = [tag.strip().lower() for tag in query.split(",") if tag.strip()]
+            if not query_tags:
+                print("Empty query; returning random images")
+                cursor.execute("SELECT path FROM images ORDER BY RANDOM() LIMIT ?", (count,))
+                paths = [row[0] for row in cursor.fetchall()]
+                return {"images": paths}
+            
+            query_placeholders = ",".join("?" * len(query_tags))
+            cursor.execute(f"""
+                SELECT path FROM images
+                WHERE EXISTS (
+                    SELECT 1 FROM json_each(tags)
+                    WHERE lower(json_each.value) IN ({query_placeholders})
+                )
+            """, query_tags)
+            matches = [row[0] for row in cursor.fetchall()]
+            
+            if not matches:
+                print("No matches found for query; returning random images")
+                cursor.execute("SELECT path FROM images ORDER BY RANDOM() LIMIT ?", (count,))
+                paths = [row[0] for row in cursor.fetchall()]
+            else:
+                paths = random.sample(matches, min(count, len(matches)))
+            
+            print(f"Tag search for '{query}' returned {len(paths)} images")
+            print(paths)
+        images = []
+        for path in paths:
+            file_path = file_path = os.path.join(path)  # Ensure absolute path
+            if os.path.isfile(file_path):
+                try:
+                    with Image.open(file_path) as img:
+                        img.verify()  # Verify image integrity
+                    with Image.open(file_path) as img:  # Reopen after verify
+                        img_byte_arr = BytesIO()
+                        img.save(img_byte_arr, format=img.format)
+                        base64_string = base64.b64encode(img_byte_arr.getvalue()).decode("utf-8")
+                        mime_type = f"image/{os.path.splitext(path)[1][1:].lower()}"
+                        base64_data = f"data:{mime_type};base64,{base64_string}"
+                    images.append({ 'url': path, 'content': base64_data})
+                except Exception as e:
+                    print(f"Error processing {path}: {e}")
+                    images.append(str(e))
+            else:
+                images.append("File not found")
+        return {"images": images}
         return {"images": paths}
     except Exception as e:
         print(f"Search error: {e}")
