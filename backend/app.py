@@ -76,8 +76,17 @@ class LockRequest(BaseModel):
 @app.get("/api/search")
 async def search(query: str, count: int = 12):
     print('search query = ', query, ' and count = ', count)
-    if query == "":
-        query = "default"
+    tag_order = [
+        "graphic design",
+        "packaging",
+        "photo",
+        "illustration",
+        "photo",
+        "printmaking",
+        "web landing page",
+        "logomark",
+        "typography"
+    ]
     global locked_dino_embedding, locked_clip_embedding, locked_tags, locked_path
     paths = []
     try:
@@ -124,90 +133,127 @@ async def search(query: str, count: int = 12):
                     idx = clip_ids.index(cid)
                     clip_score = 1 / (1 + clip_distances[0][idx])
                 scores[cid] = DINO_WEIGHT * dino_score + CLIP_WEIGHT * clip_score
+
+            # Group candidates by tag_order tags
+            tag_to_candidates = {tag: [] for tag in tag_order}
+            for cid in candidate_ids:
+                if cid not in candidate_tags or cid not in candidate_paths:
+                    continue
+                tags = [t.lower() for t in candidate_tags[cid]]
+                for tag in tag_order:
+                    if tag in tags:
+                        tag_to_candidates[tag].append((cid, scores.get(cid, 0)))
+                        break
             
-            # Use all candidates (no tag filtering)
-            filtered_ids = list(scores.keys())
-            print(f"Proceeding with {len(filtered_ids)} candidates after excluding locked image")
-
-            # Cluster for diversity
-            if len(filtered_ids) > count:
-                candidate_embeddings = np.array([dino_index.reconstruct(int(idx)) for idx in range(len(dino_indices[0])) if dino_ids[idx] in filtered_ids])
-                if len(candidate_embeddings) < NUM_CLUSTERS:
-                    selected_ids = filtered_ids[:count]
-                else:
-                    kmeans = KMeans(n_clusters=min(NUM_CLUSTERS, len(filtered_ids)), random_state=42)
-                    cluster_labels = kmeans.fit_predict(candidate_embeddings)
-                    selected_ids = []
-                    for cluster in range(min(NUM_CLUSTERS, len(filtered_ids))):
-                        cluster_indices = [i for i, label in enumerate(cluster_labels) if label == cluster]
-                        if cluster_indices:
-                            selected_ids.append(filtered_ids[cluster_indices[0]])
-                    if len(selected_ids) < count:
-                        remaining_candidates = [cid for cid in filtered_ids if cid not in selected_ids]
-                        if remaining_candidates:
-                            remaining_with_scores = [(cid, scores[cid]) for cid in remaining_candidates]
-                            remaining_with_scores.sort(key=lambda x: x[1], reverse=True)
-                            remaining_needed = count - len(selected_ids)
-                            for cid, _ in remaining_with_scores[:remaining_needed]:
-                                selected_ids.append(cid)
-                    selected_ids = selected_ids[:count]
-            else:
-                selected_ids = filtered_ids[:count]
-
-            paths = [candidate_paths[cid] for cid in selected_ids if cid in candidate_paths]
-            print(f"Hybrid search returned {len(paths)} images")
-            print(paths)
-            # return {"images": paths}
+            # Select images in tag_order sequence
+            remaining_count = count
+            for tag in tag_order:
+                if remaining_count <= 0:
+                    break
+                candidates = tag_to_candidates.get(tag, [])
+                if candidates:
+                    # Sort by hybrid score for this tag
+                    candidates.sort(key=lambda x: x[1], reverse=True)
+                    num_to_take = min(len(candidates), remaining_count)
+                    selected_ids = [cid for cid, _ in candidates[:num_to_take]]
+                    paths.extend([candidate_paths[cid] for cid in selected_ids])
+                    remaining_count -= num_to_take
+            
+            print(f"Hybrid search returned {len(paths)} images, ordered by tag_order with matching tags")
         else:
-        
             # Tag-based search
             query_tags = [tag.strip().lower() for tag in query.split(",") if tag.strip()]
+            
             if not query_tags:
-                print("Empty query; returning random images")
-                cursor.execute("SELECT path FROM images ORDER BY RANDOM() LIMIT ?", (count,))
-                paths = [row[0] for row in cursor.fetchall()]
-                return {"images": paths}
-            
-            query_placeholders = ",".join("?" * len(query_tags))
-            cursor.execute(f"""
-                SELECT path FROM images
-                WHERE EXISTS (
-                    SELECT 1 FROM json_each(tags)
-                    WHERE lower(json_each.value) IN ({query_placeholders})
-                )
-            """, query_tags)
-            matches = [row[0] for row in cursor.fetchall()]
-            
-            if not matches:
-                print("No matches found for query; returning random images")
-                cursor.execute("SELECT path FROM images ORDER BY RANDOM() LIMIT ?", (count,))
-                paths = [row[0] for row in cursor.fetchall()]
+                print("Empty query; returning images with tags aligned to tag_order")
+                remaining_count = count
+                for tag in tag_order:
+                    if remaining_count <= 0:
+                        break
+                    cursor.execute("""
+                        SELECT path FROM images
+                        WHERE EXISTS (
+                            SELECT 1 FROM json_each(tags)
+                            WHERE lower(json_each.value) = ?
+                        )
+                        ORDER BY RANDOM()
+                        LIMIT 1
+                    """, (tag.lower(),))
+                    tag_paths = [row[0] for row in cursor.fetchall()]
+                    paths.extend(tag_paths)
+                    remaining_count -= len(tag_paths)
+                print(f"Tag-based search (empty query) returned {len(paths)} images, each with tags aligned to tag_order")
             else:
-                paths = random.sample(matches, min(count, len(matches)))
-            
-            print(f"Tag search for '{query}' returned {len(paths)} images")
-            print(paths)
+                query_placeholders = ",".join("?" * len(query_tags))
+                cursor.execute(f"""
+                    SELECT path, tags FROM images
+                    WHERE EXISTS (
+                        SELECT 1 FROM json_each(tags)
+                        WHERE lower(json_each.value) IN ({query_placeholders})
+                    )
+                """, query_tags)
+                matches = [(row[0], json.loads(row[1])) for row in cursor.fetchall()]
+                
+                if not matches:
+                    print("No matches found for query; returning images with tags aligned to tag_order")
+                    remaining_count = count
+                    for tag in tag_order:
+                        if remaining_count <= 0:
+                            break
+                        cursor.execute("""
+                            SELECT path FROM images
+                            WHERE EXISTS (
+                                SELECT 1 FROM json_each(tags)
+                                WHERE lower(json_each.value) = ?
+                            )
+                            ORDER BY RANDOM()
+                            LIMIT 1
+                        """, (tag.lower(),))
+                        tag_paths = [row[0] for row in cursor.fetchall()]
+                        paths.extend(tag_paths)
+                        remaining_count -= len(tag_paths)
+                    print(f"Tag-based search (no matches) returned {len(paths)} images, each with tags aligned to tag_order")
+                else:
+                    # Group matches by tag_order tags
+                    tag_to_paths = {tag: [] for tag in tag_order}
+                    for path, tags in matches:
+                        tags = [t.lower() for t in tags]
+                        for tag in tag_order:
+                            if tag in tags:
+                                tag_to_paths[tag].append(path)
+                                break  # Only assign to the first matching tag in tag_order
+                    
+                    # Select images in tag_order sequence
+                    remaining_count = count
+                    for tag in tag_order:
+                        if remaining_count <= 0:
+                            break
+                        tag_paths = tag_to_paths.get(tag, [])
+                        num_to_take = min(len(tag_paths), remaining_count)
+                        paths.extend(random.sample(tag_paths, num_to_take) if num_to_take < len(tag_paths) else tag_paths)
+                        remaining_count -= num_to_take
+                    print(f"Tag search for '{query}' returned {len(paths)} images, ordered by tag_order with matching tags")
+        print(paths)
         images = []
         for path in paths:
-            file_path = file_path = os.path.join(path)  # Ensure absolute path
+            file_path = os.path.join(path)
             if os.path.isfile(file_path):
                 try:
                     with Image.open(file_path) as img:
-                        img.verify()  # Verify image integrity
-                    with Image.open(file_path) as img:  # Reopen after verify
+                        img.verify()
+                    with Image.open(file_path) as img:
                         img_byte_arr = BytesIO()
                         img.save(img_byte_arr, format=img.format)
                         base64_string = base64.b64encode(img_byte_arr.getvalue()).decode("utf-8")
                         mime_type = f"image/{os.path.splitext(path)[1][1:].lower()}"
                         base64_data = f"data:{mime_type};base64,{base64_string}"
-                    images.append({ 'url': path, 'content': base64_data})
+                    images.append({'url': path, 'content': base64_data})
                 except Exception as e:
                     print(f"Error processing {path}: {e}")
                     images.append(str(e))
             else:
                 images.append("File not found")
         return {"images": images}
-        return {"images": paths}
     except Exception as e:
         print(f"Search error: {e}")
         return {"images": []}
