@@ -603,7 +603,7 @@ export default function MoodboardGenerator() {
             imgElement.onerror = reject
 
             imgElement.crossOrigin = "anonymous"
-            imgElement.src = img.url
+            imgElement.src = img.content
 
             setTimeout(() => reject(new Error("Image load timeout")), 5000)
           })
