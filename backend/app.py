@@ -132,15 +132,17 @@ async def search(query: str, count: int = 12):
                 if tag_matches:
                     print(f"Found {len(tag_matches)} images for tag '{tag}'")
                     selected_cid = random.choice(tag_matches)
-                    selected_path = candidate_paths.get(selected_cid)
                 else:
                     print(f"No images found for tag '{tag}'; selecting random image")
                     selected_cid = random.choice(candidate_ids)
-                    selected_path = candidate_paths.get(selected_cid)
-                    print(selected_path)
+                selected_path = candidate_paths.get(selected_cid)
+                candidate_ids.remove(selected_cid)
                 
                 if selected_path:
                     paths.append(selected_path)
+            if len(paths) < count:
+                random_paths = random.sample(list(candidate_paths.values()), count - len(paths))
+                paths.extend(random_paths)
 
             print(f"CLIP search returned {len(paths)} images, randomized within tag_order")
         else:
@@ -215,9 +217,13 @@ async def search(query: str, count: int = 12):
                             # print(f"No images found for tag '{tag}'; skipping")
                             selected_path = random.choice(matches)[0]
                         paths.append(selected_path)
+                        matches = [m for m in matches if m[0] != selected_path]
+                    if len(paths) < count:
+                        random_paths = random.sample([m[0] for m in matches], count - len(paths))
+                        paths.extend(random_paths)
                 
-                # print(f"Tag search for '{query}' returned {len(paths)} images")
-                print(paths)
+                print(f"Tag search for '{query}' returned {len(paths)} images")
+                # print(paths)
         images = []
 
         # Process images to base64
