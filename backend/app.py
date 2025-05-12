@@ -119,68 +119,106 @@ async def search(query: str, count: int = 12):
                 candidate_ids = {cid for cid in candidate_ids if candidate_paths.get(cid) != locked_path}
                 print(f"Excluded locked image with path {locked_path} from candidates")
             candidate_ids = {cid for cid in candidate_ids if candidate_paths.get(cid) not in recently_returned}
+            candidate_ids = list(candidate_ids)
             print(f"Found {len(candidate_ids)} candidates in CLIP search after exclusions")
 
-            # Compute CLIP scores with slight random perturbation for variability
-            scores = {}
-            for cid in candidate_ids:
-                if cid not in candidate_paths:
-                    continue
-                if cid in clip_ids:
-                    idx = clip_ids.index(cid)
-                    clip_score = 1 / (1 + clip_distances[0][idx])
-                    # Add small random perturbation to vary results
-                    scores[cid] = clip_score + random.uniform(-0.01, 0.01)
-                else:
-                    scores[cid] = random.uniform(0, 0.1)  # Low score for non-CLIP matches
-
-            # Group candidates by tag_order tags
-            tag_to_candidates = {tag: [] for tag in tag_order}
-            for cid in candidate_ids:
-                if cid not in candidate_tags or cid not in candidate_paths:
-                    continue
-                tags = [t.lower() for t in candidate_tags[cid]]
-                for tag in tag_order:
-                    if tag in tags:
-                        tag_to_candidates[tag].append((cid, scores.get(cid, 0)))
-                        break  # Assign to first matching tag in tag_order
-
-            # Select images in tag_order sequence with randomization
-            remaining_count = count
             for tag in tag_order:
-                if remaining_count <= 0:
-                    break
-                candidates = tag_to_candidates.get(tag, [])
-                if candidates:
-                    # Shuffle candidates to ensure different selections
-                    random.shuffle(candidates)
-                    num_to_take = min(len(candidates), remaining_count)
-                    selected_ids = [cid for cid, _ in candidates[:num_to_take]]
-                    paths.extend([candidate_paths[cid] for cid in selected_ids])
-                    remaining_count -= num_to_take
+                # Find candidate images with the current tag
+                tag_matches = [
+                    cid for cid in candidate_ids
+                    if cid in candidate_tags and tag.lower() in [t.lower() for t in candidate_tags[cid]]
+                    and candidate_paths.get(cid) not in paths
+                ]
+                if tag_matches:
+                    print(f"Found {len(tag_matches)} images for tag '{tag}'")
+                    selected_cid = random.choice(tag_matches)
+                    selected_path = candidate_paths.get(selected_cid)
+                else:
+                    print(f"No images found for tag '{tag}'; selecting random image")
+                    selected_cid = random.choice(candidate_ids)
+                    selected_path = candidate_paths.get(selected_cid)
+                    print(selected_path)
+                
+                if selected_path:
+                    paths.append(selected_path)
 
             print(f"CLIP search returned {len(paths)} images, randomized within tag_order")
         else:
-            # Non-query search: return random images aligned with tag_order
-            print("Empty query; returning random images with tags aligned to tag_order")
-            remaining_count = count
-            for tag in tag_order:
-                if remaining_count <= 0:
-                    break
-                cursor.execute("""
-                    SELECT path FROM images
+            query_tags = [tag.strip().lower() for tag in query.split(",") if tag.strip()]
+            if not query_tags:
+                print("Empty query; returning random images")
+                # Create a query to fetch images, prioritizing the tag order
+                paths = []
+                remaining_count = count
+                for tag in tag_order:
+                    if remaining_count <= 0:
+                        break
+                    cursor.execute(f"""
+                        SELECT path FROM images
+                        WHERE EXISTS (
+                            SELECT 1 FROM json_each(tags)
+                            WHERE lower(json_each.value) = ?
+                        )
+                        ORDER BY RANDOM()
+                        LIMIT ?
+                    """, (tag.lower(), remaining_count))
+                    tag_paths = [row[0] for row in cursor.fetchall()]
+                    paths.extend(tag_paths)
+                    remaining_count -= len(tag_paths)
+
+                # If we still need more images, fetch random ones to fill the count
+                if remaining_count > 0:
+                    cursor.execute("SELECT path FROM images ORDER BY RANDOM() LIMIT ?", (remaining_count,))
+                    paths.extend([row[0] for row in cursor.fetchall()])
+                
+                paths = paths[:count]  # Ensure we don't exceed the requested count
+                print(f"Random search returned {len(paths)} images")
+                # return {"images": paths}
+            else:
+                query_placeholders = ",".join("?" * len(query_tags))
+                cursor.execute(f"""
+                    SELECT path, tags FROM images
                     WHERE EXISTS (
                         SELECT 1 FROM json_each(tags)
-                        WHERE lower(json_each.value) = ?
+                        WHERE lower(json_each.value) IN ({query_placeholders})
                     )
-                    AND path NOT IN ({})
-                    ORDER BY RANDOM()
-                    LIMIT 1
-                """.format(",".join("?" * len(recently_returned))), (tag.lower(), *recently_returned))
-                tag_paths = [row[0] for row in cursor.fetchall()]
-                paths.extend(tag_paths)
-                remaining_count -= len(tag_paths)
-            print(f"Non-query search returned {len(paths)} random images aligned to tag_order")
+                """, query_tags)
+                matches = []
+                for row in cursor.fetchall():
+                    path, tags_json = row
+                    try:
+                        # Parse JSON tags into a list of strings
+                        tags = json.loads(tags_json)
+                        if not isinstance(tags, list):
+                            print(f"Warning: Tags for image '{path}' are not a list: {tags}")
+                            continue
+                        matches.append((path, tags))
+                    except json.JSONDecodeError:
+                        print(f"Warning: Failed to parse tags for image '{path}': {tags_json}")
+                        continue
+                
+                if not matches:
+                    print("No matches found for query; returning random images")
+                    cursor.execute("SELECT path FROM images ORDER BY RANDOM() LIMIT ?", (count,))
+                    paths = [row[0] for row in cursor.fetchall()]
+                else:
+                    for tag in tag_order:
+                        # Find images with the current tag
+                        tag_matches = [
+                            path for path, tags in matches
+                            if tag.lower() in [t.lower() for t in tags] and path not in paths
+                        ]
+                        if tag_matches:
+                            # print(f"Found {len(tag_matches)} images for tag '{tag}'")
+                            selected_path = random.choice(tag_matches)
+                        else:
+                            # print(f"No images found for tag '{tag}'; skipping")
+                            selected_path = random.choice(matches)[0]
+                        paths.append(selected_path)
+                
+                # print(f"Tag search for '{query}' returned {len(paths)} images")
+                print(paths)
+        images = []
 
         # Process images to base64
         images = []
