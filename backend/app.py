@@ -30,8 +30,7 @@ FAISS_CLIP_INDEX_FILE = os.path.join(DATA_DIR, "faiss_clip_index.bin")
 FAISS_ID_MAP_FILE = os.path.join(DATA_DIR, "faiss_id_map.json")
 IMAGE_DIR = os.path.join(DATA_DIR, "images/")
 MOODBOARD_FILE = os.path.join(DATA_DIR, "moodboard.png")
-SIMILARITY_K = 100
-NUM_CLUSTERS = 12
+SIMILARITY_K = 50
 
 # Initialize Faiss indices
 try:
@@ -93,11 +92,13 @@ async def search(query: str, count: int = 12):
         if locked_clip_embedding is not None:
             # CLIP-based search for vibe
             print('Performing CLIP similarity search')
-            clip_index.hnsw.efSearch = 100
-            clip_distances, clip_indices = clip_index.search(
-                np.array(locked_clip_embedding, dtype=np.float32), k=SIMILARITY_K
-            )
-
+            # clip_index.hnsw.efSearch = 100
+            # clip_distances, clip_indices = clip_index.search(
+            #     np.array(locked_clip_embedding, dtype=np.float32), k=SIMILARITY_K
+            # )
+            dino_index.hnsw.efSearch = 100
+            clip_distances, clip_indices = dino_index.search(np.array(locked_dino_embedding, dtype=np.float32), k=SIMILARITY_K)
+            
             # Collect candidate IDs
             candidate_ids = set()
             clip_ids = [id_map.get(str(idx)) for idx in clip_indices[0] if str(idx) in id_map]
