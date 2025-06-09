@@ -718,11 +718,10 @@ export default function MoodboardGenerator() {
             targetRowHeight={Math.floor(window.innerHeight / 2)}
             renderImage={(props) => {
               const image = images.find(img => img.content === props.photo.src);
-              const { key, ...rest } = props;
               return (
                 <MoodboardImage
                   key={props.photo.key || props.photo.src}
-                  {...rest}
+                  {...props}
                   image={image}
                   toggleLock={toggleLock}
                   addImage={addImage}
