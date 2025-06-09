@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { Search, ExternalLink, Lock, Plus, X, Unlock, GripVertical } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
+import Gallery from "react-photo-gallery";
+const Mansory = require("react-masonry-css").default;
 
 // Tag categories structure
 const tagCategories = {
@@ -214,14 +216,10 @@ export default function MoodboardGenerator() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState("")
-  const [showSpacebarHint, setShowSpacebarHint] = useState(true)
   const [filteredTags, setFilteredTags] = useState<string[]>([])
   const [isSearchFocused, setIsSearchFocused] = useState(false)
   const [draggedImage, setDraggedImage] = useState<({ id: string; url: string; content:string; tag: string; isLocked: boolean; position: number; width: number, height: number; } | null)>()
   const [draggedOverImage, setDraggedOverImage] = useState<({ id: string; url: string; content:string; tag: string; isLocked: boolean; position: number; width: number, height: number; } | null)>()
-  const [isDragging, setIsDragging] = useState(false)
-  const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 })
-  const [originalIndex, setOriginalIndex] = useState(null)
 
   const searchInputRef = useRef<HTMLInputElement>(null)
   const suggestionsRef = useRef<HTMLDivElement>(null)
@@ -411,237 +409,87 @@ export default function MoodboardGenerator() {
 
     setImages((prevImages) => prevImages.filter((img) => img.id !== id))
   }
-
-  const handleDragStart = (e, image, index) => {
-    e.stopPropagation()
-    setDraggedImage(image)
-    setOriginalIndex(index)
-    setIsDragging(true)
-
-    setDragPosition({
-      x: e.clientX,
-      y: e.clientY,
-    })
-
-    if (e.dataTransfer) {
-      e.dataTransfer.effectAllowed = "move"
-      const dragImg = document.createElement("canvas")
-      dragImg.width = 0
-      dragImg.height = 0
-      document.body.appendChild(dragImg)
-      e.dataTransfer.setDragImage(dragImg, 0, 0)
-      setTimeout(() => document.body.removeChild(dragImg), 0)
-    }
-  }
-
-  const handleDragOver = (e, image, index) => {
-    e.preventDefault()
-    e.stopPropagation()
-
-    if (draggedImage && draggedImage.id !== image.id) {
-      setDraggedOverImage(image)
-    }
-    setDragPosition({
-      x: e.clientX,
-      y: e.clientY,
-    })
-
-    return false
-  }
-
-  const handleDrop = (e, targetIndex) => {
-    e.preventDefault()
-    e.stopPropagation()
-
-    if (!draggedImage) return
-
-    const sourceIndex = images.findIndex((img) => img.id === draggedImage.id)
-
-    if (sourceIndex !== targetIndex) {
-      setImages((prevImages) => {
-        const newImages = [...prevImages]
-        const temp = newImages[sourceIndex]
-        newImages[sourceIndex] = newImages[targetIndex]
-        newImages[targetIndex] = temp
-        return newImages
-      })
-    }
-
-    setDraggedImage(null)
-    setDraggedOverImage(null)
-    setOriginalIndex(null)
-    setIsDragging(false)
-
-    return false
-  }
-
-  const handleDragEnd = (e) => {
-    e.preventDefault()
-    e.stopPropagation()
-
-    setDraggedImage(null)
-    setDraggedOverImage(null)
-    setOriginalIndex(null)
-    setIsDragging(false)
-  }
-
-  const handleMouseMove = useCallback(
-    (e) => {
-      if (isDragging) {
-        setDragPosition({
-          x: e.clientX,
-          y: e.clientY,
-        })
-      }
-    },
-    [isDragging],
-  )
-
-  useEffect(() => {
-    window.addEventListener("mousemove", handleMouseMove)
-    return () => {
-      window.removeEventListener("mousemove", handleMouseMove)
-    }
-  }, [handleMouseMove])
-
+  const galleryRef = useRef<HTMLDivElement>(null);
+  
   const handleExport = async () => {
-    if (images.length === 0 || isSaving) return
+    if (images.length === 0 || isSaving) return;
 
-    setIsSaving(true)
-    setSaveError("")
+    setIsSaving(true);
+    setSaveError("");
 
     try {
-      const canvas = document.createElement("canvas")
-      const ctx = canvas.getContext("2d")
+      // Wait for the DOM to update
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
-      const canvasWidth = 1200
-      const canvasHeight = 800
+      // Get all image elements inside the gallery
+      const galleryEl = galleryRef.current;
+      if (!galleryEl) throw new Error("Gallery not found");
 
-      canvas.width = canvasWidth
-      canvas.height = canvasHeight
+      const imgEls = Array.from(galleryEl.querySelectorAll("img"));
 
-      if (!ctx) {
-        console.error("Failed to get canvas context");
-        return;
+      // Calculate bounding box of all images
+      const rects = imgEls.map(img => img.getBoundingClientRect());
+      const minX = Math.min(...rects.map(r => r.left));
+      const minY = Math.min(...rects.map(r => r.top));
+      const maxX = Math.max(...rects.map(r => r.right));
+      const maxY = Math.max(...rects.map(r => r.bottom));
+      const width = Math.round(maxX - minX);
+      const height = Math.round(maxY - minY);
+
+      // Create canvas
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Failed to get canvas context");
+
+      // Draw each image at its DOM position
+      for (let i = 0; i < imgEls.length; i++) {
+        const imgEl = imgEls[i];
+        const rect = rects[i];
+        // Find the corresponding image data
+        const imgData = images.find(img => img.content === imgEl.src || imgEl.src.endsWith(img.url));
+        if (!imgData) continue;
+
+        // Load image
+        await new Promise((resolve, reject) => {
+          const tempImg = new window.Image();
+          tempImg.crossOrigin = "anonymous";
+          tempImg.onload = () => {
+            ctx.drawImage(
+              tempImg,
+              rect.left - minX,
+              rect.top - minY,
+              rect.width,
+              rect.height
+            );
+            // Optionally draw lock icon, etc. here
+            resolve(null);
+          };
+          tempImg.onerror = reject;
+          tempImg.src = imgEl.src;
+        });
       }
 
-      ctx.fillStyle = "#121212" // Dark background
-      ctx.fillRect(0, 0, canvasWidth, canvasHeight)
+      // Add watermark or overlay if needed
+      ctx.fillStyle = "rgba(255,255,255,0.5)";
+      ctx.font = "12px sans-serif";
+      ctx.textAlign = "right";
+      ctx.fillText("Generated with Moodboard", width - 10, height - 10);
 
-      let positions: { x: number; y: number; width: number; height: number }[] = []
-
-      if (images.length <= 3) {
-        const width = canvasWidth / images.length
-        positions = images.map((_, i) => ({
-          x: i * width,
-          y: 0,
-          width: width,
-          height: canvasHeight,
-        }))
-      } else if (images.length === 4) {
-        const width = canvasWidth / 2
-        const height = canvasHeight / 2
-        positions = [
-          { x: 0, y: 0, width, height },
-          { x: width, y: 0, width, height },
-          { x: 0, y: height, width, height },
-          { x: width, y: height, width, height },
-        ]
-      } else if (images.length <= 6) {
-        const width = canvasWidth / 3
-        const height = canvasHeight / 2
-        positions = Array(6)
-          .fill(null)
-          .map((_, i) => ({
-            x: (i % 3) * width,
-            y: Math.floor(i / 3) * height,
-            width,
-            height,
-          }))
-      } else if (images.length <= 9) {
-        const width = canvasWidth / 3
-        const height = canvasHeight / 3
-        positions = Array(9)
-          .fill(null)
-          .map((_, i) => ({
-            x: (i % 3) * width,
-            y: Math.floor(i / 3) * height,
-            width,
-            height,
-          }))
-      } else {
-        const width = canvasWidth / 4
-        const height = canvasHeight / 3
-        positions = Array(12)
-          .fill(null)
-          .map((_, i) => ({
-            x: (i % 4) * width,
-            y: Math.floor(i / 4) * height,
-            width,
-            height,
-          }))
-      }
-
-      for (let i = 0; i < Math.min(images.length, positions.length); i++) {
-        const img = images[i]
-        const pos = positions[i]
-
-        try {
-          const imgElement = new Image()
-
-          await new Promise((resolve, reject) => {
-            imgElement.onload = resolve
-            imgElement.onerror = reject
-
-            imgElement.crossOrigin = "anonymous"
-            imgElement.src = img.content
-
-            setTimeout(() => reject(new Error("Image load timeout")), 5000)
-          })
-
-          ctx.drawImage(imgElement, pos.x, pos.y, pos.width, pos.height)
-
-          if (img.isLocked) {
-            ctx.fillStyle = "rgba(0, 0, 0, 0.5)"
-            ctx.beginPath()
-            ctx.arc(pos.x + 20, pos.y + 20, 15, 0, Math.PI * 2)
-            ctx.fill()
-
-            ctx.fillStyle = "#ff9800"
-            ctx.font = "bold 14px sans-serif"
-            ctx.textAlign = "center"
-            ctx.fillText("🔒", pos.x + 20, pos.y + 24)
-          }
-        } catch (imgError) {
-          console.warn(`Failed to load image ${i}:`, imgError)
-
-          ctx.fillStyle = "#2a2a2a"
-          ctx.fillRect(pos.x, pos.y, pos.width, pos.height)
-
-          ctx.fillStyle = "#ffffff"
-          ctx.font = "16px sans-serif"
-          ctx.textAlign = "center"
-          ctx.fillText("Image unavailable", pos.x + pos.width / 2, pos.y + pos.height / 2)
-        }
-      }
-
-      ctx.fillStyle = "rgba(255, 255, 255, 0.5)"
-      ctx.font = "12px sans-serif"
-      ctx.textAlign = "right"
-      ctx.fillText("Generated with Moodboard", canvasWidth - 10, canvasHeight - 10)
-
-      const dataUrl = canvas.toDataURL("image/png")
-      const link = document.createElement("a")
-      link.download = `moodboard-${Date.now()}.png`
-      link.href = dataUrl
-      link.click()
+      // Export
+      const dataUrl = canvas.toDataURL("image/png");
+      const link = document.createElement("a");
+      link.download = `moodboard-${Date.now()}.png`;
+      link.href = dataUrl;
+      link.click();
     } catch (error) {
-      console.error("Error saving moodboard:", error)
-      setSaveError("There was an error saving your moodboard. CORS restrictions may prevent loading some images.")
+      console.error("Error saving moodboard:", error);
+      setSaveError("There was an error saving your moodboard. CORS restrictions may prevent loading some images.");
     } finally {
-      setIsSaving(false)
+      setIsSaving(false);
     }
-  }
+  };
 
   const highlightMatch = (text: string, query: string) => {
     if (!query.trim()) return text
@@ -669,6 +517,113 @@ export default function MoodboardGenerator() {
     }
   }
 
+  const photos = images.map(img => ({
+    src: img.content || "/placeholder.svg",
+    width: img.width || 1,
+    height: img.height || 1,
+    alt: img.tag,
+  }));
+
+  function MoodboardImage({ 
+    photo,
+    margin,
+    image,
+    toggleLock,
+    addImage,
+    removeImage,
+    draggedImage,
+    draggedOverImage,
+  }:any) {
+    return (
+      <motion.div
+        key={image.id}
+        style={{
+          margin,
+          width: photo.width,
+          height: photo.height,
+          position: "relative",
+          overflow: "hidden",
+          borderRadius: "0.375rem",
+          background: "#222",
+        }}
+        initial={{ opacity: 0 }}
+        animate={{
+          opacity: draggedImage && draggedImage.id === image.id ? 0.6 : 1,
+          scale:
+            draggedImage && draggedImage.id === image.id
+              ? 0.95
+              : draggedOverImage && draggedOverImage.id === image.id
+              ? 1.05
+              : 1,
+          transition: { duration: 0.2 },
+        }}
+        transition={{ duration: 0.3 }}
+      >
+        <img
+          src={image.content || "/placeholder.svg"}
+          alt={image.tag}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            transition: "all 0.3s",
+            ...(draggedOverImage && draggedOverImage.id === image.id ? { filter: "brightness(1.1)" } : {}),
+          }}
+          loading="eager"
+        />
+
+        <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity duration-200 bg-black/40 z-10">
+          <div className="flex gap-3">
+            <button
+              className="w-10 h-10 rounded-full bg-black/80 flex items-center justify-center text-orange-500 hover:scale-110 transition-transform"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleLock(image.id);
+              }}
+              title={image.isLocked ? "Unlock image" : "Lock image"}
+            >
+              {image.isLocked ? <Lock size={18} /> : <Unlock size={18} />}
+            </button>
+            <button
+              className="w-10 h-10 rounded-full bg-black/80 flex items-center justify-center text-green-500 hover:scale-110 transition-transform"
+              onClick={(e) => {
+                e.stopPropagation();
+                addImage();
+              }}
+              title="Add new image"
+              disabled={false}
+            >
+              <Plus size={18} />
+            </button>
+            <button
+              className="w-10 h-10 rounded-full bg-black/80 flex items-center justify-center text-red-500 hover:scale-110 transition-transform"
+              onClick={(e) => {
+                e.stopPropagation();
+                removeImage(image.id);
+              }}
+              title="Remove image"
+              disabled={false}
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+
+        <div className="absolute inset-0 bg-black/0 hover:bg-black/40 transition-colors flex items-end">
+          <div className="p-2 w-full transform translate-y-full hover:translate-y-0 transition-transform">
+            <div className="text-xs text-white/80">{image.tag}</div>
+          </div>
+        </div>
+
+        {image.isLocked && (
+          <div className="absolute top-2 left-2 bg-black/70 text-orange-500 p-1 rounded-full">
+            <Lock size={14} />
+          </div>
+        )}
+      </motion.div>
+    );
+  }
+  
   return (
     <main className="min-h-screen bg-background text-foreground overflow-hidden">
       <header className="h-16 px-4 flex items-center justify-between border-b border-border">
@@ -718,16 +673,14 @@ export default function MoodboardGenerator() {
         </div>
 
         <AnimatePresence>
-          {showSpacebarHint && (
-            <motion.div
-              className="absolute left-1/2 transform -translate-x-1/2 text-sm text-orange-500 uppercase tracking-wider"
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-            >
-              Press space to generate moodboards
-            </motion.div>
-          )}
+          <motion.div
+            className="absolute left-1/2 transform -translate-x-1/2 text-sm text-orange-500 uppercase tracking-wider"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+          >
+            Press space to generate moodboards
+          </motion.div>
         </AnimatePresence>
 
         <button
@@ -751,115 +704,38 @@ export default function MoodboardGenerator() {
         </button>
       </header>
 
-      <div className={`moodboard-grid images-${images.length} p-2 group`}>
-        {isLoading
-          ? // Loading state
-            Array(images.length || 7)
-              .fill(null)
-              .map((_, index) => (
-                <div
-                  key={`loading-${index}`}
-                  className={`image-${index + 1} bg-secondary animate-pulse rounded-sm`}
-                ></div>
-              ))
-              : images.map((image, index) => (
-                <motion.div
-                  key={image.id}
-                  className={`image-${index + 1} overflow-hidden rounded-sm relative group/image ${
-                    draggedImage && draggedImage.id === image.id
-                      ? "opacity-50 scale-95 ring-2 ring-primary shadow-lg"
-                      : ""
-                  } ${
-                    draggedOverImage && draggedOverImage.id === image.id
-                      ? "border-2 border-primary bg-primary/10 scale-105 shadow-xl"
-                      : ""
-                  }`}
-                  initial={{ opacity: 0 }}
-                  animate={{
-                    opacity: draggedImage && draggedImage.id === image.id ? 0.6 : 1,
-                    scale:
-                      draggedImage && draggedImage.id === image.id
-                        ? 0.95
-                        : draggedOverImage && draggedOverImage.id === image.id
-                          ? 1.05
-                          : 1,
-                    transition: { duration: 0.2 },
-                  }}
-                  transition={{ duration: 0.3 }}
-                  draggable={true}
-                  onDragStart={(e) => handleDragStart(e, image, index)}
-                  onDragOver={(e) => handleDragOver(e, image, index)}
-                  onDrop={(e) => handleDrop(e, index)}
-                  onDragEnd={handleDragEnd}
-                >
-                <img
-                  src={image.content || "/placeholder.svg"}
-                  alt={image.tag}
-                  className={`w-full h-full object-cover transition-all duration-300 ${
-                    draggedOverImage && draggedOverImage.id === image.id ? "brightness-110" : ""
-                  }`}
-                  loading="eager"
+      {isLoading ?
+        Array(images.length || 7).fill(null).map((_, index) => (
+          <div
+            key={`loading-${index}`}
+            className={`image-${index + 1} bg-secondary animate-pulse rounded-sm`}
+          ></div>
+        )) :
+        <div ref={galleryRef}>
+          <Gallery
+            photos={photos}
+            direction="row"
+            margin={8}
+            targetRowHeight={Math.floor(window.innerHeight / 2)}
+            renderImage={(props) => {
+              const image = images.find(img => img.content === props.photo.src);
+              const { key, ...rest } = props;
+              return (
+                <MoodboardImage
+                  key={props.photo.key || props.photo.src}
+                  {...rest}
+                  image={image}
+                  toggleLock={toggleLock}
+                  addImage={addImage}
+                  removeImage={removeImage}
+                  draggedImage={draggedImage}
+                  draggedOverImage={draggedOverImage}
                 />
-
-                <div className="absolute top-2 right-2 w-8 h-8 bg-black/70 rounded-full flex items-center justify-center cursor-grab active:cursor-grabbing opacity-0 group-hover/image:opacity-100 transition-opacity">
-                  <GripVertical size={16} className="text-white/80" />
-                </div>
-
-                <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity duration-200 bg-black/40 z-10">
-                  <div className="flex gap-3">
-                    <button
-                      className="w-10 h-10 rounded-full bg-black/80 flex items-center justify-center text-orange-500 hover:scale-110 transition-transform"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        toggleLock(image.id)
-                      }}
-                      title={image.isLocked ? "Unlock image" : "Lock image"}
-                    >
-                      {image.isLocked ? <Lock size={18} /> : <Unlock size={18} />}
-                    </button>
-
-                    <button
-                      className="w-10 h-10 rounded-full bg-black/80 flex items-center justify-center text-green-500 hover:scale-110 transition-transform"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        addImage()
-                      }}
-                      title="Add new image"
-                      disabled={images.length >= 12}
-                      style={{ opacity: images.length >= 12 ? 0.5 : 1 }}
-                    >
-                      <Plus size={18} />
-                    </button>
-
-                    <button
-                      className="w-10 h-10 rounded-full bg-black/80 flex items-center justify-center text-red-500 hover:scale-110 transition-transform"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        removeImage(image.id)
-                      }}
-                      title="Remove image"
-                      disabled={images.length <= 1}
-                      style={{ opacity: images.length <= 1 ? 0.5 : 1 }}
-                    >
-                      <X size={18} />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="absolute inset-0 bg-black/0 hover:bg-black/40 transition-colors flex items-end">
-                  <div className="p-2 w-full transform translate-y-full hover:translate-y-0 transition-transform">
-                    <div className="text-xs text-white/80">{image.tag}</div>
-                  </div>
-                </div>
-
-                {image.isLocked && (
-                  <div className="absolute top-2 left-2 bg-black/70 text-orange-500 p-1 rounded-full">
-                    <Lock size={14} />
-                  </div>
-                )}
-              </motion.div>
-            ))}
-      </div>
+              );
+            }}
+          />
+        </div> 
+      }
 
       {!isLoading && images.length < 12 && (
         <div className="fixed bottom-4 right-4 z-50">
@@ -878,26 +754,6 @@ export default function MoodboardGenerator() {
       {saveError && (
         <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-destructive text-destructive-foreground px-4 py-2 rounded-md text-sm">
           {saveError}
-        </div>
-      )}
-
-      {/* Drag preview that follows cursor */}
-      {isDragging && draggedImage && (
-        <div
-          className="fixed pointer-events-none z-50"
-          style={{
-            left: `${dragPosition.x}px`,
-            top: `${dragPosition.y}px`,
-            transform: "translate(-50%, -50%)",
-          }}
-        >
-          <div className="w-16 h-16 rounded-md overflow-hidden shadow-2xl ring-2 ring-primary opacity-80">
-            <img
-              src={draggedImage.url || "/placeholder.svg"}
-              alt="Dragging"
-              className="w-full h-full object-cover"
-            />
-          </div>
         </div>
       )}
     </main>

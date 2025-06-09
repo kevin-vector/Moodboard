@@ -33,7 +33,18 @@
 
   --radius: 0.5rem;
 }
-
+.moodboard-masonry {
+  display: flex;
+  margin-left: -16px; /* gutter size offset */
+  width: auto;
+}
+.moodboard-masonry-column {
+  padding-left: 16px; /* gutter size */
+  background-clip: padding-box;
+}
+.moodboard-masonry-column > div {
+  margin-bottom: 16px;
+}
 body {
   @apply bg-background text-foreground;
   font-feature-settings: "rlig" 1, "calt" 1;
@@ -45,10 +56,15 @@ body {
 
 /* Dynamic grid layouts based on image count */
 .moodboard-grid {
+  position: relative;
+  width: 100vw;
+  max-width: 100vw;
+  aspect-ratio: 16 / 9;
+  margin: 0 auto;
   display: grid;
   gap: 8px;
-  height: calc(100vh - 80px);
-  width: 100%;
+  background: #18181b;
+  overflow: hidden;
 }
 
 /* Default layout for 7 images */
