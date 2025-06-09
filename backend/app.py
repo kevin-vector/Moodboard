@@ -85,12 +85,10 @@ async def search(query: str, count: int = 12):
         "typography"
     ]
     paths = []
-    # Track recently returned paths to avoid repetition (in-memory, resets per call)
-    recently_returned = set()  # Could be made persistent with a global or cache
+    recently_returned = set()
 
     try:
         if locked_clip_embedding is not None:
-            # CLIP-based search for vibe
             print('Performing CLIP similarity search')
             # clip_index.hnsw.efSearch = 100
             # clip_distances, clip_indices = clip_index.search(
@@ -99,7 +97,6 @@ async def search(query: str, count: int = 12):
             dino_index.hnsw.efSearch = 100
             clip_distances, clip_indices = dino_index.search(np.array(locked_dino_embedding, dtype=np.float32), k=SIMILARITY_K)
             
-            # Collect candidate IDs
             candidate_ids = set()
             clip_ids = [id_map.get(str(idx)) for idx in clip_indices[0] if str(idx) in id_map]
             candidate_ids.update(clip_ids)
@@ -107,7 +104,6 @@ async def search(query: str, count: int = 12):
                 print("No valid image IDs found in CLIP search")
                 return {"images": []}
 
-            # Fetch metadata from database
             cursor.execute("SELECT image_id, path, tags FROM images WHERE image_id IN ({})".format(
                 ",".join("?" * len(candidate_ids))
             ), list(candidate_ids))
@@ -115,7 +111,6 @@ async def search(query: str, count: int = 12):
             candidate_paths = {row[0]: row[1] for row in candidates}
             candidate_tags = {row[0]: json.loads(row[2]) for row in candidates}
 
-            # Exclude locked path and recently returned images
             if locked_path:
                 candidate_ids = {cid for cid in candidate_ids if candidate_paths.get(cid) != locked_path}
                 print(f"Excluded locked image with path {locked_path} from candidates")
@@ -124,7 +119,6 @@ async def search(query: str, count: int = 12):
             print(f"Found {len(candidate_ids)} candidates in CLIP search after exclusions")
 
             for tag in tag_order:
-                # Find candidate images with the current tag
                 tag_matches = [
                     cid for cid in candidate_ids
                     if cid in candidate_tags and tag.lower() in [t.lower() for t in candidate_tags[cid]]
@@ -150,7 +144,6 @@ async def search(query: str, count: int = 12):
             query_tags = [tag.strip().lower() for tag in query.split(",") if tag.strip()]
             if not query_tags:
                 print("Empty query; returning random images")
-                # Create a query to fetch images, prioritizing the tag order
                 paths = []
                 remaining_count = count
                 for tag in tag_order:
@@ -169,14 +162,12 @@ async def search(query: str, count: int = 12):
                     paths.extend(tag_paths)
                     remaining_count -= len(tag_paths)
 
-                # If we still need more images, fetch random ones to fill the count
                 if remaining_count > 0:
                     cursor.execute("SELECT path FROM images ORDER BY RANDOM() LIMIT ?", (remaining_count,))
                     paths.extend([row[0] for row in cursor.fetchall()])
                 
-                paths = paths[:count]  # Ensure we don't exceed the requested count
+                paths = paths[:count]
                 print(f"Random search returned {len(paths)} images")
-                # return {"images": paths}
             else:
                 query_placeholders = ",".join("?" * len(query_tags))
                 cursor.execute(f"""
@@ -190,7 +181,6 @@ async def search(query: str, count: int = 12):
                 for row in cursor.fetchall():
                     path, tags_json = row
                     try:
-                        # Parse JSON tags into a list of strings
                         tags = json.loads(tags_json)
                         if not isinstance(tags, list):
                             print(f"Warning: Tags for image '{path}' are not a list: {tags}")
@@ -206,16 +196,13 @@ async def search(query: str, count: int = 12):
                     paths = [row[0] for row in cursor.fetchall()]
                 else:
                     for tag in tag_order:
-                        # Find images with the current tag
                         tag_matches = [
                             path for path, tags in matches
                             if tag.lower() in [t.lower() for t in tags] and path not in paths
                         ]
                         if tag_matches:
-                            # print(f"Found {len(tag_matches)} images for tag '{tag}'")
                             selected_path = random.choice(tag_matches)
                         else:
-                            # print(f"No images found for tag '{tag}'; skipping")
                             selected_path = random.choice(matches)[0]
                         paths.append(selected_path)
                         matches = [m for m in matches if m[0] != selected_path]
@@ -224,10 +211,6 @@ async def search(query: str, count: int = 12):
                         paths.extend(random_paths)
                 
                 print(f"Tag search for '{query}' returned {len(paths)} images")
-                # print(paths)
-        images = []
-
-        # Process images to base64
         images = []
         for path in paths:
             file_path = os.path.join(path)
@@ -236,13 +219,18 @@ async def search(query: str, count: int = 12):
                     with Image.open(file_path) as img:
                         img.verify()
                     with Image.open(file_path) as img:
+                        width, height = img.size
                         img_byte_arr = BytesIO()
                         img.save(img_byte_arr, format=img.format)
                         base64_string = base64.b64encode(img_byte_arr.getvalue()).decode("utf-8")
                         mime_type = f"image/{os.path.splitext(path)[1][1:].lower()}"
                         base64_data = f"data:{mime_type};base64,{base64_string}"
-                    images.append({'url': path, 'content': base64_data})
-                    # Add to recently returned set
+                    images.append({
+                        'url': path,
+                        'content': base64_data,
+                        'width': width,
+                        'height': height
+                    })
                     recently_returned.add(path)
                 except Exception as e:
                     print(f"Error processing {path}: {e}")

@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { Search, ExternalLink, Lock, Plus, X, Unlock, GripVertical } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Content } from "next/font/google"
 
 // Tag categories structure
 const tagCategories = {
@@ -169,16 +168,20 @@ const generateMockImages = async (searchQuery = "", count) => {
           tag: randomTag,
           isLocked: false,
           position: index,
+          width: 0,
+          height: 0,
         }
       })
     }
-    fetchedImages = result.images.map((url: {url: String, content: String}, index: number) => ({
+    fetchedImages = result.images.map((url: {url: String, content: String, width: number, height: number}, index: number) => ({
       id: `img-${Date.now()}-${index}`,
       url: url.url,
       content: url.content,
       tag: searchQuery,
       isLocked: false,
       position: index,
+      width: url.width || 0,
+      height: url.height || 0,
     }));
     console.log("fetchedImages", fetchedImages);
     return fetchedImages.slice(0, count);
@@ -196,6 +199,8 @@ const generateMockImages = async (searchQuery = "", count) => {
         tag: randomTag,
         isLocked: false,
         position: index,
+        width: 0,
+        height: 0,
       }
     })
   }
@@ -203,7 +208,7 @@ const generateMockImages = async (searchQuery = "", count) => {
 
 export default function MoodboardGenerator() {
   const [images, setImages] = useState<
-    ({ id: string; url: string; content: string; tag: string; isLocked: boolean; position: number })[]
+    ({ id: string; url: string; content: string; tag: string; isLocked: boolean; position: number; width: number, height: number; })[]
   >([])
   const [searchQuery, setSearchQuery] = useState("")
   const [isLoading, setIsLoading] = useState(true)
@@ -212,8 +217,8 @@ export default function MoodboardGenerator() {
   const [showSpacebarHint, setShowSpacebarHint] = useState(true)
   const [filteredTags, setFilteredTags] = useState<string[]>([])
   const [isSearchFocused, setIsSearchFocused] = useState(false)
-  const [draggedImage, setDraggedImage] = useState<({ id: string; url: string; content:string; tag: string; isLocked: boolean; position: number } | null)>()
-  const [draggedOverImage, setDraggedOverImage] = useState<({ id: string; url: string; content:string; tag: string; isLocked: boolean; position: number } | null)>()
+  const [draggedImage, setDraggedImage] = useState<({ id: string; url: string; content:string; tag: string; isLocked: boolean; position: number; width: number, height: number; } | null)>()
+  const [draggedOverImage, setDraggedOverImage] = useState<({ id: string; url: string; content:string; tag: string; isLocked: boolean; position: number; width: number, height: number; } | null)>()
   const [isDragging, setIsDragging] = useState(false)
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 })
   const [originalIndex, setOriginalIndex] = useState(null)
@@ -407,23 +412,19 @@ export default function MoodboardGenerator() {
     setImages((prevImages) => prevImages.filter((img) => img.id !== id))
   }
 
-  // Handle drag start
   const handleDragStart = (e, image, index) => {
     e.stopPropagation()
     setDraggedImage(image)
     setOriginalIndex(index)
     setIsDragging(true)
 
-    // Store initial cursor position
     setDragPosition({
       x: e.clientX,
       y: e.clientY,
     })
 
-    // For better drag preview in some browsers
     if (e.dataTransfer) {
       e.dataTransfer.effectAllowed = "move"
-      // Create a transparent drag image
       const dragImg = document.createElement("canvas")
       dragImg.width = 0
       dragImg.height = 0
@@ -433,7 +434,6 @@ export default function MoodboardGenerator() {
     }
   }
 
-  // Handle drag over
   const handleDragOver = (e, image, index) => {
     e.preventDefault()
     e.stopPropagation()
@@ -441,8 +441,6 @@ export default function MoodboardGenerator() {
     if (draggedImage && draggedImage.id !== image.id) {
       setDraggedOverImage(image)
     }
-
-    // Update cursor position for custom drag preview
     setDragPosition({
       x: e.clientX,
       y: e.clientY,
@@ -451,7 +449,6 @@ export default function MoodboardGenerator() {
     return false
   }
 
-  // Handle drop
   const handleDrop = (e, targetIndex) => {
     e.preventDefault()
     e.stopPropagation()
@@ -460,7 +457,6 @@ export default function MoodboardGenerator() {
 
     const sourceIndex = images.findIndex((img) => img.id === draggedImage.id)
 
-    // Only perform the swap if we're dropping on a different image
     if (sourceIndex !== targetIndex) {
       setImages((prevImages) => {
         const newImages = [...prevImages]
@@ -471,7 +467,6 @@ export default function MoodboardGenerator() {
       })
     }
 
-    // Reset drag state
     setDraggedImage(null)
     setDraggedOverImage(null)
     setOriginalIndex(null)
@@ -480,19 +475,16 @@ export default function MoodboardGenerator() {
     return false
   }
 
-  // Handle drag end (including cases where the drop didn't happen on a valid target)
   const handleDragEnd = (e) => {
     e.preventDefault()
     e.stopPropagation()
 
-    // Reset all drag state
     setDraggedImage(null)
     setDraggedOverImage(null)
     setOriginalIndex(null)
     setIsDragging(false)
   }
 
-  // Add a new function to track mouse movement during drag
   const handleMouseMove = useCallback(
     (e) => {
       if (isDragging) {
@@ -505,7 +497,6 @@ export default function MoodboardGenerator() {
     [isDragging],
   )
 
-  // Add event listener for mouse movement
   useEffect(() => {
     window.addEventListener("mousemove", handleMouseMove)
     return () => {
@@ -760,7 +751,6 @@ export default function MoodboardGenerator() {
         </button>
       </header>
 
-      {/* Moodboard Grid */}
       <div className={`moodboard-grid images-${images.length} p-2 group`}>
         {isLoading
           ? // Loading state
@@ -811,12 +801,10 @@ export default function MoodboardGenerator() {
                   loading="eager"
                 />
 
-                {/* Drag handle */}
                 <div className="absolute top-2 right-2 w-8 h-8 bg-black/70 rounded-full flex items-center justify-center cursor-grab active:cursor-grabbing opacity-0 group-hover/image:opacity-100 transition-opacity">
                   <GripVertical size={16} className="text-white/80" />
                 </div>
 
-                {/* Image hover controls */}
                 <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity duration-200 bg-black/40 z-10">
                   <div className="flex gap-3">
                     <button
@@ -858,14 +846,12 @@ export default function MoodboardGenerator() {
                   </div>
                 </div>
 
-                {/* Optional: Tag overlay on hover */}
                 <div className="absolute inset-0 bg-black/0 hover:bg-black/40 transition-colors flex items-end">
                   <div className="p-2 w-full transform translate-y-full hover:translate-y-0 transition-transform">
                     <div className="text-xs text-white/80">{image.tag}</div>
                   </div>
                 </div>
 
-                {/* Lock indicator */}
                 {image.isLocked && (
                   <div className="absolute top-2 left-2 bg-black/70 text-orange-500 p-1 rounded-full">
                     <Lock size={14} />
@@ -875,7 +861,6 @@ export default function MoodboardGenerator() {
             ))}
       </div>
 
-      {/* Add image button at the bottom */}
       {!isLoading && images.length < 12 && (
         <div className="fixed bottom-4 right-4 z-50">
           <button
