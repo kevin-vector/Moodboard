@@ -583,28 +583,31 @@ export default function MoodboardGenerator() {
             >
               {image.isLocked ? <Lock size={18} /> : <Unlock size={18} />}
             </button>
-            <button
-              className="w-10 h-10 rounded-full bg-black/80 flex items-center justify-center text-green-500 hover:scale-110 transition-transform"
-              onClick={(e) => {
-                e.stopPropagation();
-                addImage();
-              }}
-              title="Add new image"
-              disabled={false}
-            >
-              <Plus size={18} />
-            </button>
-            <button
-              className="w-10 h-10 rounded-full bg-black/80 flex items-center justify-center text-red-500 hover:scale-110 transition-transform"
-              onClick={(e) => {
-                e.stopPropagation();
-                removeImage(image.id);
-              }}
-              title="Remove image"
-              disabled={false}
-            >
-              <X size={18} />
-            </button>
+              <button
+                className="w-10 h-10 rounded-full bg-black/80 flex items-center justify-center text-green-500 hover:scale-110 transition-transform"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  addImage()
+                }}
+                title="Add new image"
+                disabled={images.length >= 12}
+                style={{ opacity: images.length >= 12 ? 0.5 : 1 }}
+              >
+                <Plus size={18} />
+              </button>
+
+              <button
+                className="w-10 h-10 rounded-full bg-black/80 flex items-center justify-center text-red-500 hover:scale-110 transition-transform"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  removeImage(image.id)
+                }}
+                title="Remove image"
+                disabled={images.length <= 1}
+                style={{ opacity: images.length <= 1 ? 0.5 : 1 }}
+              >
+                <X size={18} />
+              </button>
           </div>
         </div>
 
