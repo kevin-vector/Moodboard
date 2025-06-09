@@ -572,7 +572,11 @@ export default function MoodboardGenerator() {
         />
 
         <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity duration-200 bg-black/40 z-10">
-          <div className="flex gap-3">
+          <div className="flex gap-3"
+            style={{
+              flexDirection: photo.width > 200 ? "row" : "column",
+            }}
+          >
             <button
               className="w-10 h-10 rounded-full bg-black/80 flex items-center justify-center text-orange-500 hover:scale-110 transition-transform"
               onClick={(e) => {
@@ -583,31 +587,31 @@ export default function MoodboardGenerator() {
             >
               {image.isLocked ? <Lock size={18} /> : <Unlock size={18} />}
             </button>
-              <button
-                className="w-10 h-10 rounded-full bg-black/80 flex items-center justify-center text-green-500 hover:scale-110 transition-transform"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  addImage()
-                }}
-                title="Add new image"
-                disabled={images.length >= 12}
-                style={{ opacity: images.length >= 12 ? 0.5 : 1 }}
-              >
-                <Plus size={18} />
-              </button>
+            <button
+              className="w-10 h-10 rounded-full bg-black/80 flex items-center justify-center text-green-500 hover:scale-110 transition-transform"
+              onClick={(e) => {
+                e.stopPropagation()
+                addImage()
+              }}
+              title="Add new image"
+              disabled={images.length >= 12}
+              style={{ opacity: images.length >= 12 ? 0.5 : 1 }}
+            >
+              <Plus size={18} />
+            </button>
 
-              <button
-                className="w-10 h-10 rounded-full bg-black/80 flex items-center justify-center text-red-500 hover:scale-110 transition-transform"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  removeImage(image.id)
-                }}
-                title="Remove image"
-                disabled={images.length <= 1}
-                style={{ opacity: images.length <= 1 ? 0.5 : 1 }}
-              >
-                <X size={18} />
-              </button>
+            <button
+              className="w-10 h-10 rounded-full bg-black/80 flex items-center justify-center text-red-500 hover:scale-110 transition-transform"
+              onClick={(e) => {
+                e.stopPropagation()
+                removeImage(image.id)
+              }}
+              title="Remove image"
+              disabled={images.length <= 1}
+              style={{ opacity: images.length <= 1 ? 0.5 : 1 }}
+            >
+              <X size={18} />
+            </button>
           </div>
         </div>
 
