@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import { Search, ExternalLink, Lock, Plus, X, Unlock, GripVertical } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import Gallery from "react-photo-gallery";
-const Mansory = require("react-masonry-css").default;
 
 // Tag categories structure
 const tagCategories = {
