@@ -217,9 +217,6 @@ export default function MoodboardGenerator() {
   const [saveError, setSaveError] = useState("")
   const [filteredTags, setFilteredTags] = useState<string[]>([])
   const [isSearchFocused, setIsSearchFocused] = useState(false)
-  const [draggedImage, setDraggedImage] = useState<({ id: string; url: string; content:string; tag: string; isLocked: boolean; position: number; width: number, height: number; } | null)>()
-  const [draggedOverImage, setDraggedOverImage] = useState<({ id: string; url: string; content:string; tag: string; isLocked: boolean; position: number; width: number, height: number; } | null)>()
-
   const searchInputRef = useRef<HTMLInputElement>(null)
   const suggestionsRef = useRef<HTMLDivElement>(null)
 
@@ -417,16 +414,10 @@ export default function MoodboardGenerator() {
     setSaveError("");
 
     try {
-      // Wait for the DOM to update
       await new Promise((resolve) => setTimeout(resolve, 100));
-
-      // Get all image elements inside the gallery
       const galleryEl = galleryRef.current;
       if (!galleryEl) throw new Error("Gallery not found");
-
       const imgEls = Array.from(galleryEl.querySelectorAll("img"));
-
-      // Calculate bounding box of all images
       const rects = imgEls.map(img => img.getBoundingClientRect());
       const minX = Math.min(...rects.map(r => r.left));
       const minY = Math.min(...rects.map(r => r.top));
@@ -434,23 +425,17 @@ export default function MoodboardGenerator() {
       const maxY = Math.max(...rects.map(r => r.bottom));
       const width = Math.round(maxX - minX);
       const height = Math.round(maxY - minY);
-
-      // Create canvas
       const canvas = document.createElement("canvas");
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("Failed to get canvas context");
 
-      // Draw each image at its DOM position
       for (let i = 0; i < imgEls.length; i++) {
         const imgEl = imgEls[i];
         const rect = rects[i];
-        // Find the corresponding image data
         const imgData = images.find(img => img.content === imgEl.src || imgEl.src.endsWith(img.url));
         if (!imgData) continue;
-
-        // Load image
         await new Promise((resolve, reject) => {
           const tempImg = new window.Image();
           tempImg.crossOrigin = "anonymous";
@@ -462,21 +447,16 @@ export default function MoodboardGenerator() {
               rect.width,
               rect.height
             );
-            // Optionally draw lock icon, etc. here
             resolve(null);
           };
           tempImg.onerror = reject;
           tempImg.src = imgEl.src;
         });
       }
-
-      // Add watermark or overlay if needed
       ctx.fillStyle = "rgba(255,255,255,0.5)";
       ctx.font = "12px sans-serif";
       ctx.textAlign = "right";
       ctx.fillText("Generated with Moodboard", width - 10, height - 10);
-
-      // Export
       const dataUrl = canvas.toDataURL("image/png");
       const link = document.createElement("a");
       link.download = `moodboard-${Date.now()}.png`;
@@ -645,7 +625,6 @@ export default function MoodboardGenerator() {
               placeholder="/imagine"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              onFocus={() => setIsSearchFocused(true)}
               autoComplete="off"
             />
           </form>
@@ -727,14 +706,12 @@ export default function MoodboardGenerator() {
               const image = images.find(img => img.content === props.photo.src);
               return (
                 <MoodboardImage
-                  key={props.photo.key || props.photo.src}
+                  key={props.photo.src}
                   {...props}
                   image={image}
                   toggleLock={toggleLock}
                   addImage={addImage}
                   removeImage={removeImage}
-                  draggedImage={draggedImage}
-                  draggedOverImage={draggedOverImage}
                 />
               );
             }}
