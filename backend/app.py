@@ -124,17 +124,19 @@ async def search(query: str, count: int = 12):
                     if cid in candidate_tags and tag.lower() in [t.lower() for t in candidate_tags[cid]]
                     and candidate_paths.get(cid) not in paths
                 ]
-                if tag_matches:
-                    print(f"Found {len(tag_matches)} images for tag '{tag}'")
-                    selected_cid = random.choice(tag_matches)
-                else:
-                    print(f"No images found for tag '{tag}'; selecting random image")
-                    selected_cid = random.choice(candidate_ids)
-                selected_path = candidate_paths.get(selected_cid)
-                candidate_ids.remove(selected_cid)
-                
-                if selected_path:
-                    paths.append(selected_path)
+                choices = tag_matches if tag_matches else candidate_ids
+                # Assign lower weight to recently returned images
+                weights = [
+                    0.2 if candidate_paths.get(cid) in recently_returned else 1.0
+                    for cid in choices
+                ]
+                if choices:
+                    selected_cid = random.choices(choices, weights=weights, k=1)[0]
+                    print(f"Selected image for tag '{tag}': {selected_cid} (recent penalty applied)")
+                    selected_path = candidate_paths.get(selected_cid)
+                    candidate_ids.remove(selected_cid)
+                    if selected_path:
+                        paths.append(selected_path)
             if len(paths) < count:
                 random_paths = random.sample(list(candidate_paths.values()), count - len(paths))
                 paths.extend(random_paths)
